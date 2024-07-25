@@ -143,16 +143,35 @@ async def _get_client(data, proxy_dict):
     return client
 
 
+async def set_username_if_not_exists(client):
+    me = await client.get_me()
+    if me.username is None:
+        username = generate_username(me.first_name, me.last_name)
+        await client(functions.account.UpdateUsernameRequest(username))
+        me = await client.get_me()
+        if me.username is None:
+            raise Exception("Username not set")
+
+
 async def _get_blum(client, data):
-    app_url = "https://telegram.blum.codes/" + (
-        "?tgWebAppStartParam=" + data["referralCode"] if data["referralCode"] is not None else "")
-    web_view = await client(functions.messages.RequestWebViewRequest(
-        peer='BlumCryptoBot',
-        bot='BlumCryptoBot',
-        platform='android',
-        from_bot_menu=True,
-        url=app_url,
-    ))
+    await set_username_if_not_exists(client)
+    if data["referralCode"] is not None:
+        web_view = await client(functions.messages.RequestWebViewRequest(
+            peer='BlumCryptoBot',
+            bot='BlumCryptoBot',
+            platform='android',
+            from_bot_menu=True,
+            url="https://telegram.blum.codes/",
+            start_param=data["referralCode"]
+        ))
+    else:
+        web_view = await client(functions.messages.RequestWebViewRequest(
+            peer='BlumCryptoBot',
+            bot='BlumCryptoBot',
+            platform='android',
+            from_bot_menu=True,
+            url="https://telegram.blum.codes/"
+        ))
 
     auth_url = web_view.url
     tg_web_app_data = unquote(
@@ -209,23 +228,16 @@ async def _get_tapswap(client, data):
 
 
 async def _get_dogs(client, data):
-    me = await client.get_me()
-    if me.username is None:
-        username = generate_username(me.first_name, me.last_name)
-        await client(functions.account.UpdateUsernameRequest(username))
-        me = await client.get_me()
-        if me.username is None:
-            raise Exception("Username not set")
+    await set_username_if_not_exists(client)
     chat = await client.get_input_entity('dogshouse_bot')
-    web_view = ""
     if data["referralCode"] is not None:
         web_view = await client(functions.messages.RequestAppWebViewRequest(
-        peer='me',
-        app=InputBotAppShortName(bot_id=chat, short_name="join"),
-        platform='android',
-        write_allowed=True,
-        start_param=data["referralCode"]
-    ))
+            peer='me',
+            app=InputBotAppShortName(bot_id=chat, short_name="join"),
+            platform='android',
+            write_allowed=True,
+            start_param=data["referralCode"]
+        ))
     else:
         web_view = await client(functions.messages.RequestAppWebViewRequest(
             peer='me',
@@ -241,18 +253,21 @@ async def _get_dogs(client, data):
 
 async def _get_onewin(client, data):
     chat = await client.get_input_entity('token1win_bot')
-    web_view = await client(functions.messages.RequestAppWebViewRequest(
-        peer='me',
-        app=InputBotAppShortName(bot_id=chat, short_name="start"),
-        platform='android',
-        write_allowed=True,
-        start_param=data["referralCode"]
-    )) if data["referralCode"] is not None else await client(functions.messages.RequestAppWebViewRequest(
-        peer='me',
-        app=InputBotAppShortName(bot_id=chat, short_name="start"),
-        platform='android',
-        write_allowed=True,
-    ))
+    if data["referralCode"] is not None:
+        web_view = await client(functions.messages.RequestAppWebViewRequest(
+            peer='me',
+            app=InputBotAppShortName(bot_id=chat, short_name="start"),
+            platform='android',
+            write_allowed=True,
+            start_param=data["referralCode"]
+        ))
+    else:
+        web_view = await client(functions.messages.RequestAppWebViewRequest(
+            peer='me',
+            app=InputBotAppShortName(bot_id=chat, short_name="start"),
+            platform='android',
+            write_allowed=True,
+        ))
     auth_url = web_view.url
     tg_web_app_data = unquote(
         string=unquote(string=auth_url.split('tgWebAppData=')[1].split('&tgWebAppVersion')[0]))
@@ -384,19 +399,18 @@ async def join_channels(request: Request):
 
 
 def generate_username(first_name=None, last_name=None):
-    base_username = ""
-    if first_name is not None and first_name != "":
-        base_username += first_name.lower().replace(" ", "_")
-    if last_name is not None and last_name != "":
-        if base_username != "":
-            base_username += "_"
-        base_username += last_name.lower().replace(" ", "_")
-    if base_username == "":
+    base_username = "_".join(
+        part.lower().replace(" ", "_") for part in (first_name, last_name) if part
+    )
+
+    if not base_username:
         base_username = ''.join(random.choices(string.ascii_lowercase, k=8))
+
     base_username = unidecode(base_username)
     username = base_username + str(random.randint(1000000, 1000000000))
-    username = re.sub(r'[^a-zA-Z0-9_]', '', username)
-    username = username[:30]
+
+    username = re.sub(r'[^a-zA-Z0-9_]', '', username)[:30]
+
     return username
 
 
