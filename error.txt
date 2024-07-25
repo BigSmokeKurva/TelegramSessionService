@@ -1,3 +1,9 @@
 No module named 'async_timeout'
 No module named 'async_timeout'
 No module named 'async_timeout'
+RPCError 400: BOT_APP_INVALID (caused by RequestAppWebViewRequest)
+RPCError 400: BOT_APP_INVALID (caused by RequestAppWebViewRequest)
+RPCError 400: BOT_APP_INVALID (caused by RequestAppWebViewRequest)
+'TelegramClient' object has no attribute 'resolve_peer'
+RPCError 400: BOT_APP_BOT_INVALID (caused by RequestAppWebViewRequest)
+can only concatenate str (not "int") to str
