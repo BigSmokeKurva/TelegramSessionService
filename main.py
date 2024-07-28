@@ -251,6 +251,7 @@ async def _get_dogs(client, data):
         string=unquote(string=auth_url.split('tgWebAppData=')[1].split('&tgWebAppVersion')[0]))
     return tg_web_app_data
 
+
 async def _get_banana(client, data):
     await set_username_if_not_exists(client)
     chat = await client.get_input_entity('OfficialBananaBot')
