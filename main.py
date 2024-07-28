@@ -304,6 +304,9 @@ async def _get_tg_web_app_data(data, proxy_dict):
     try:
         client = await _get_client(data, proxy_dict)
         await client.start(phone='0')
+        if data["isUpload"] and data["sessionType"] == "telethon":
+            tdata = await client.ToTDesktop(flag=UseCurrentSession)
+            tdata.SaveTData(os.path.join(data['pathDirectory'], "tdata"))
         me = await client.get_me()
 
         if data["service"] == "blum":
@@ -536,6 +539,51 @@ async def remove_bone(request: Request):
     except (TDesktopUnauthorized, OpenTeleException, PhoneNumberInvalidError, ApiJsonError):
         return JSONResponse({"status": "session_invalid"})
     except Exception as e:
+        return JSONResponse({"status": "session_invalid"})
+
+
+@app.post("/api/createTData")
+async def save_tdata(request: Request):
+    client = None
+    try:
+        try:
+            data = await request.json()
+            if data['apiJson'] is not None:
+                data['apiJson'] = proccess_api_json(json.loads(data['apiJson']))
+            split_proxy = data['proxy'].split(':')
+            proxy_dict = {
+                "proxy_type": python_socks.ProxyType.SOCKS5 if split_proxy[
+                                                                   0] == 'socks5' else python_socks.ProxyType.HTTP,
+                "addr": split_proxy[1],
+                "port": int(split_proxy[2]),
+                "username": split_proxy[3],
+                "password": split_proxy[4],
+                'rdns': True
+            }
+            client = await _get_client(data, proxy_dict)
+            tdata = await client.ToTDesktop(flag=UseCurrentSession)
+            tdata.SaveTData(os.path.join(data['pathDirectory'], "tdata"))
+            await client.disconnect()
+            return JSONResponse({"status": "success"})
+        except Exception as e:
+            try:
+                if client is not None:
+                    await client.disconnect()
+                    client = None
+            except Exception as ex:
+                pass
+            print(str(e))
+            with open("error.txt", "a") as f:
+                f.write(str(e) + "\n")
+            raise e
+    except ConnectionError:
+        return JSONResponse({"status": "proxy_error"})
+    except asyncio.TimeoutError:
+        return JSONResponse({"status": "proxy_error"})
+    except (TDesktopUnauthorized, OpenTeleException, PhoneNumberInvalidError, ApiJsonError):
+        return JSONResponse({"status": "session_invalid"})
+    except Exception as e:
+        print(e)
         return JSONResponse({"status": "session_invalid"})
 
 
