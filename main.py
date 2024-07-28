@@ -251,6 +251,29 @@ async def _get_dogs(client, data):
         string=unquote(string=auth_url.split('tgWebAppData=')[1].split('&tgWebAppVersion')[0]))
     return tg_web_app_data
 
+async def _get_banana(client, data):
+    await set_username_if_not_exists(client)
+    chat = await client.get_input_entity('OfficialBananaBot')
+    if data["referralCode"] is not None:
+        web_view = await client(functions.messages.RequestAppWebViewRequest(
+            peer='me',
+            app=InputBotAppShortName(bot_id=chat, short_name="banana"),
+            platform='android',
+            write_allowed=True,
+            start_param=data["referralCode"]
+        ))
+    else:
+        web_view = await client(functions.messages.RequestAppWebViewRequest(
+            peer='me',
+            app=InputBotAppShortName(bot_id=chat, short_name="banana"),
+            platform='android',
+            write_allowed=True,
+        ))
+    auth_url = web_view.url
+    tg_web_app_data = unquote(
+        string=unquote(string=auth_url.split('tgWebAppData=')[1].split('&tgWebAppVersion')[0]))
+    return tg_web_app_data
+
 
 async def _get_onewin(client, data):
     chat = await client.get_input_entity('token1win_bot')
@@ -292,6 +315,8 @@ async def _get_tg_web_app_data(data, proxy_dict):
             tg_web_app_data = await _get_tapswap(client, data)
         elif data["service"] == "onewin":
             tg_web_app_data = await _get_onewin(client, data)
+        elif data["service"] == "banana":
+            tg_web_app_data = await _get_banana(client, data)
         else:
             tg_web_app_data = None
 
