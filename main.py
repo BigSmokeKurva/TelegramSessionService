@@ -177,7 +177,7 @@ async def _get_blum(client, data):
     auth_url = web_view.url
     tg_web_app_data = unquote(
         string=unquote(string=auth_url.split('tgWebAppData=')[1].split('&tgWebAppVersion')[0]))
-    return tg_web_app_data
+    return tg_web_app_data, auth_url
 
 
 async def _get_iceberg(client, data):
@@ -201,7 +201,7 @@ async def _get_iceberg(client, data):
     auth_url = web_view.url
     tg_web_app_data = unquote(
         string=unquote(string=auth_url.split('tgWebAppData=')[1].split('&tgWebAppVersion')[0]))
-    return tg_web_app_data
+    return tg_web_app_data, auth_url
 
 
 async def _get_tapswap(client, data):
@@ -225,7 +225,7 @@ async def _get_tapswap(client, data):
     auth_url = web_view.url
     tg_web_app_data = unquote(
         string=unquote(string=auth_url.split('tgWebAppData=')[1].split('&tgWebAppVersion')[0]))
-    return tg_web_app_data
+    return tg_web_app_data, auth_url
 
 
 async def _get_dogs(client, data):
@@ -249,7 +249,7 @@ async def _get_dogs(client, data):
     auth_url = web_view.url
     tg_web_app_data = unquote(
         string=unquote(string=auth_url.split('tgWebAppData=')[1].split('&tgWebAppVersion')[0]))
-    return tg_web_app_data
+    return tg_web_app_data, auth_url
 
 
 async def _get_banana(client, data):
@@ -261,7 +261,7 @@ async def _get_banana(client, data):
             app=InputBotAppShortName(bot_id=chat, short_name="banana"),
             platform='android',
             write_allowed=True,
-            start_param=data["referralCode"]
+            start_param="referral=" + data["referralCode"]
         ))
     else:
         web_view = await client(functions.messages.RequestAppWebViewRequest(
@@ -273,7 +273,7 @@ async def _get_banana(client, data):
     auth_url = web_view.url
     tg_web_app_data = unquote(
         string=unquote(string=auth_url.split('tgWebAppData=')[1].split('&tgWebAppVersion')[0]))
-    return tg_web_app_data
+    return tg_web_app_data, auth_url
 
 
 async def _get_onewin(client, data):
@@ -296,7 +296,7 @@ async def _get_onewin(client, data):
     auth_url = web_view.url
     tg_web_app_data = unquote(
         string=unquote(string=auth_url.split('tgWebAppData=')[1].split('&tgWebAppVersion')[0]))
-    return tg_web_app_data
+    return tg_web_app_data, auth_url
 
 
 async def _get_tg_web_app_data(data, proxy_dict):
@@ -310,25 +310,26 @@ async def _get_tg_web_app_data(data, proxy_dict):
         me = await client.get_me()
 
         if data["service"] == "blum":
-            tg_web_app_data = await _get_blum(client, data)
+            tg_web_app_data, auth_url = await _get_blum(client, data)
         elif data["service"] == "iceberg":
-            tg_web_app_data = await _get_iceberg(client, data)
+            tg_web_app_data, auth_url = await _get_iceberg(client, data)
         elif data["service"] == "dogs":
-            tg_web_app_data = await _get_dogs(client, data)
+            tg_web_app_data, auth_url = await _get_dogs(client, data)
         elif data["service"] == "tapswap":
-            tg_web_app_data = await _get_tapswap(client, data)
+            tg_web_app_data, auth_url = await _get_tapswap(client, data)
         elif data["service"] == "onewin":
-            tg_web_app_data = await _get_onewin(client, data)
+            tg_web_app_data, auth_url = await _get_onewin(client, data)
         elif data["service"] == "banana":
-            tg_web_app_data = await _get_banana(client, data)
+            tg_web_app_data, auth_url = await _get_banana(client, data)
         else:
-            tg_web_app_data = None
+            tg_web_app_data, auth_url = None, None
 
         await client.disconnect()
         return JSONResponse(
             {
                 "status": "success",
                 "tgWebAppData": tg_web_app_data,
+                'authUrl': auth_url,
                 "number": me.phone,
                 "fileName": data["fileName"],
                 "apiJson": json.dumps(data['apiJson']),
