@@ -31,7 +31,7 @@ app = FastAPI()
 
 SYSTEM_VERSIONS = ["Windows 10", "Windows 11"]
 APP_VERSIONS = [
-    "5.2.3, ""5.2.2",
+    "5.3.1", "5.3.0", "5.2.3, ""5.2.2",
     "5.2.0", "5.1.8", "5.1.7", "5.1.6", "5.1.5", "5.1.4", "5.1.3", "5.1.2", "5.1.1", "5.1.0",
     "5.0.0", "4.16.10", "4.16.9", "4.16.8", "4.16.7", "4.16.6", "4.16.5", "4.16.4", "4.16.3",
     "4.16.2", "4.16.1", "4.16.0"
@@ -155,7 +155,6 @@ async def set_username_if_not_exists(client):
 
 
 async def _get_blum(client, data):
-    await set_username_if_not_exists(client)
     if data["referralCode"] is not None:
         web_view = await client(functions.messages.RequestWebViewRequest(
             peer='BlumCryptoBot',
@@ -229,7 +228,6 @@ async def _get_tapswap(client, data):
 
 
 async def _get_dogs(client, data):
-    await set_username_if_not_exists(client)
     chat = await client.get_input_entity('dogshouse_bot')
     if data["referralCode"] is not None:
         web_view = await client(functions.messages.RequestAppWebViewRequest(
@@ -253,7 +251,6 @@ async def _get_dogs(client, data):
 
 
 async def _get_banana(client, data):
-    await set_username_if_not_exists(client)
     chat = await client.get_input_entity('OfficialBananaBot')
     if data["referralCode"] is not None:
         web_view = await client(functions.messages.RequestAppWebViewRequest(
@@ -307,6 +304,7 @@ async def _get_tg_web_app_data(data, proxy_dict):
         if data["isUpload"] and data["sessionType"] == "telethon":
             tdata = await client.ToTDesktop(flag=UseCurrentSession)
             tdata.SaveTData(os.path.join(data['pathDirectory'], "tdata"))
+        await set_username_if_not_exists(client)
         me = await client.get_me()
 
         if data["service"] == "blum":
@@ -333,6 +331,7 @@ async def _get_tg_web_app_data(data, proxy_dict):
                 "number": me.phone,
                 "fileName": data["fileName"],
                 "apiJson": json.dumps(data['apiJson']),
+                'username': me.username
             })
     except Exception as e:
         try:
@@ -350,7 +349,6 @@ async def _get_tg_web_app_data(data, proxy_dict):
 @app.post("/api/getTgWebAppData")
 async def get_tg_web_app_data(request: Request):
     data = await request.json()
-
     if data['apiJson'] is not None:
         data['apiJson'] = proccess_api_json(json.loads(data['apiJson']))
     split_proxy = data['proxy'].split(':')
@@ -597,7 +595,7 @@ def generate_username(first_name=None, last_name=None):
         base_username = ''.join(random.choices(string.ascii_lowercase, k=8))
 
     base_username = unidecode(base_username)
-    username = base_username + str(random.randint(1000000, 1000000000))
+    username = base_username + str(random.randint(100, 2000))
 
     username = re.sub(r'[^a-zA-Z0-9_]', '', username)[:30]
 
