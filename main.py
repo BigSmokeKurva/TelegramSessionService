@@ -92,7 +92,7 @@ def get_app_version():
 
 async def _get_client(data, proxy_dict):
     if data['sessionType'] == 'tdata':
-        tdata = TDesktop(os.path.join(data['pathDirectory'], data['fileName']))
+        tdata = TDesktop(os.path.join(data['pathDirectory'], data['id']))
         tdata.api.system_version = get_system_version()
         tdata.api.app_version = get_app_version()
         client = await tdata.ToTelethon(
@@ -111,7 +111,6 @@ async def _get_client(data, proxy_dict):
             receive_updates=False,
             flag=UseCurrentSession
         )
-        data["fileName"] = str(data["id"]) + ".session"
         data["type"] = "telethon"
         data['apiJson'] = proccess_api_json({
             "api_id": tdata.api.api_id,
@@ -128,7 +127,7 @@ async def _get_client(data, proxy_dict):
         })
     else:
         client = TelegramClient(
-            session=os.path.join(data['pathDirectory'], data['fileName']),
+            session=os.path.join(data['pathDirectory'], data['id']) + ".session",
             api_id=data['apiJson']['api_id'],
             api_hash=data['apiJson']['api_hash'],
             device_model=data['apiJson']['device_model'],
@@ -301,9 +300,12 @@ async def _get_tg_web_app_data(data, proxy_dict):
     try:
         client = await _get_client(data, proxy_dict)
         await client.start(phone='0')
+        # TODO
+        if data["isUpload"] and data["service"] == "dogs":
+            raise Exception("Service not available")
         if data["isUpload"] and data["sessionType"] == "telethon":
             tdata = await client.ToTDesktop(flag=UseCurrentSession)
-            tdata.SaveTData(os.path.join(data['pathDirectory'], "tdata"))
+            tdata.SaveTData(os.path.join(data['pathDirectory'], data["id"]))
         await set_username_if_not_exists(client)
         me = await client.get_me()
 
@@ -329,7 +331,6 @@ async def _get_tg_web_app_data(data, proxy_dict):
                 "tgWebAppData": tg_web_app_data,
                 'authUrl': auth_url,
                 "number": me.phone,
-                "fileName": data["fileName"],
                 "apiJson": json.dumps(data['apiJson']),
                 'username': me.username
             })
@@ -561,7 +562,7 @@ async def save_tdata(request: Request):
             }
             client = await _get_client(data, proxy_dict)
             tdata = await client.ToTDesktop(flag=UseCurrentSession)
-            tdata.SaveTData(os.path.join(data['pathDirectory'], "tdata"))
+            tdata.SaveTData(os.path.join(data['pathDirectory'], data["directoryName"]))
             await client.disconnect()
             return JSONResponse({"status": "success"})
         except Exception as e:
