@@ -295,6 +295,29 @@ async def _get_onewin(client, data):
     return tg_web_app_data, auth_url
 
 
+async def _get_clayton(client, data):
+    chat = await client.get_input_entity('claytoncoinbot')
+    if data["referralCode"] is not None:
+        web_view = await client(functions.messages.RequestAppWebViewRequest(
+            peer='me',
+            app=InputBotAppShortName(bot_id=chat, short_name="game"),
+            platform='android',
+            write_allowed=True,
+            start_param=data["referralCode"]
+        ))
+    else:
+        web_view = await client(functions.messages.RequestAppWebViewRequest(
+            peer='me',
+            app=InputBotAppShortName(bot_id=chat, short_name="game"),
+            platform='android',
+            write_allowed=True,
+        ))
+    auth_url = web_view.url
+    tg_web_app_data = unquote(
+        string=unquote(string=auth_url.split('tgWebAppData=')[1].split('&tgWebAppVersion')[0]))
+    return tg_web_app_data, auth_url
+
+
 async def _get_tg_web_app_data(data, proxy_dict):
     client = None
     try:
@@ -322,6 +345,8 @@ async def _get_tg_web_app_data(data, proxy_dict):
             tg_web_app_data, auth_url = await _get_onewin(client, data)
         elif data["service"] == "banana":
             tg_web_app_data, auth_url = await _get_banana(client, data)
+        elif data["service"] == "clayton":
+            tg_web_app_data, auth_url = await _get_clayton(client, data)
         else:
             tg_web_app_data, auth_url = None, None
 
