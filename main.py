@@ -302,6 +302,7 @@ async def _get_tg_web_app_data(data, proxy_dict):
         await client.start(phone='0')
         # TODO
         if data["isUpload"] and data["service"] == "dogs":
+            await client.disconnect()
             raise Exception("Service not available")
         if data["isUpload"] and data["sessionType"] == "telethon":
             tdata = await client.ToTDesktop(flag=UseCurrentSession)
