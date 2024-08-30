@@ -14,7 +14,6 @@ from telethon import TelegramClient, functions
 from telethon.errors import PhoneNumberInvalidError
 from telethon.tl.functions.account import UpdateNotifySettingsRequest
 from telethon.tl.functions.channels import GetParticipantRequest
-from telethon.tl.functions.users import GetFullUserRequest
 from telethon.tl.types import InputPeerNotifySettings, NotificationSoundNone, InputBotAppShortName
 from unidecode import unidecode
 
@@ -295,15 +294,34 @@ async def _get_clayton(client, data):
     return tg_web_app_data, auth_url
 
 
+async def _get_cats(client, data):
+    chat = await client.get_input_entity('catsgang_bot')
+    if data["referralCode"] is not None:
+        web_view = await client(functions.messages.RequestAppWebViewRequest(
+            peer='me',
+            app=InputBotAppShortName(bot_id=chat, short_name="join"),
+            platform='android',
+            write_allowed=True,
+            start_param=data["referralCode"]
+        ))
+    else:
+        web_view = await client(functions.messages.RequestAppWebViewRequest(
+            peer='me',
+            app=InputBotAppShortName(bot_id=chat, short_name="join"),
+            platform='android',
+            write_allowed=True,
+        ))
+    auth_url = web_view.url
+    tg_web_app_data = unquote(
+        string=unquote(string=auth_url.split('tgWebAppData=')[1].split('&tgWebAppVersion')[0]))
+    return tg_web_app_data, auth_url
+
+
 async def _get_tg_web_app_data(data, proxy_dict):
     client = None
     try:
         client = await _get_client(data, proxy_dict)
         await client.start(phone='0')
-        # TODO
-        if data["isUpload"] and data["service"] == "dogs":
-            await client.disconnect()
-            raise Exception("Service not available")
         if data["isUpload"] and data["sessionType"] == "telethon":
             tdata = await client.ToTDesktop(flag=UseCurrentSession)
             tdata.SaveTData(os.path.join(data['pathDirectory'], data["id"]))
@@ -322,6 +340,8 @@ async def _get_tg_web_app_data(data, proxy_dict):
             tg_web_app_data, auth_url = await _get_banana(client, data)
         elif data["service"] == "clayton":
             tg_web_app_data, auth_url = await _get_clayton(client, data)
+        elif data["service"] == "cats":
+            tg_web_app_data, auth_url = await _get_cats(client, data)
         else:
             tg_web_app_data, auth_url = None, None
 
