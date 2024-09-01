@@ -317,6 +317,29 @@ async def _get_cats(client, data):
     return tg_web_app_data, auth_url
 
 
+async def _get_major(client, data):
+    chat = await client.get_input_entity('major')
+    if data["referralCode"] is not None:
+        web_view = await client(functions.messages.RequestAppWebViewRequest(
+            peer='me',
+            app=InputBotAppShortName(bot_id=chat, short_name="start"),
+            platform='android',
+            write_allowed=True,
+            start_param=data["referralCode"]
+        ))
+    else:
+        web_view = await client(functions.messages.RequestAppWebViewRequest(
+            peer='me',
+            app=InputBotAppShortName(bot_id=chat, short_name="start"),
+            platform='android',
+            write_allowed=True,
+        ))
+    auth_url = web_view.url
+    tg_web_app_data = unquote(
+        string=unquote(string=auth_url.split('tgWebAppData=')[1].split('&tgWebAppVersion')[0]))
+    return tg_web_app_data, auth_url
+
+
 async def _get_tg_web_app_data(data, proxy_dict):
     client = None
     try:
@@ -342,6 +365,8 @@ async def _get_tg_web_app_data(data, proxy_dict):
             tg_web_app_data, auth_url = await _get_clayton(client, data)
         elif data["service"] == "cats":
             tg_web_app_data, auth_url = await _get_cats(client, data)
+        elif data["service"] == "major":
+            tg_web_app_data, auth_url = await _get_major(client, data)
         else:
             tg_web_app_data, auth_url = None, None
 
@@ -417,17 +442,20 @@ async def join_channels(request: Request):
             client = await _get_client(data, proxy_dict)
             await client.start(phone='0')
             me = await client.get_me()
-            for channel in data['channels']:
-                channel = await client.get_entity(channel)
-                try:
-                    await client(GetParticipantRequest(channel, me.id))
-                except:
-                    await client(functions.channels.JoinChannelRequest(channel))
-                    await client(UpdateNotifySettingsRequest(
-                        peer=channel,
-                        settings=DEFAULT_MUTE_SETTINGS
-                    ))
-                    await client.edit_folder(channel, 1)
+            try:
+                for channel in data['channels']:
+                    channel = await client.get_entity(channel)
+                    try:
+                        await client(GetParticipantRequest(channel, me.id))
+                    except:
+                        await client(functions.channels.JoinChannelRequest(channel))
+                        await client(UpdateNotifySettingsRequest(
+                            peer=channel,
+                            settings=DEFAULT_MUTE_SETTINGS
+                        ))
+                        await client.edit_folder(channel, 1)
+            except:
+                pass
             await client.disconnect()
         except Exception as e:
             try:
