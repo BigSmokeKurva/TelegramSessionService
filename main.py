@@ -340,6 +340,52 @@ async def _get_major(client, data):
     return tg_web_app_data, auth_url
 
 
+async def _get_tonstation(client, data):
+    chat = await client.get_input_entity('tonstationgames_bot')
+    if data["referralCode"] is not None:
+        web_view = await client(functions.messages.RequestAppWebViewRequest(
+            peer='me',
+            app=InputBotAppShortName(bot_id=chat, short_name="app"),
+            platform='android',
+            write_allowed=True,
+            start_param=data["referralCode"]
+        ))
+    else:
+        web_view = await client(functions.messages.RequestAppWebViewRequest(
+            peer='me',
+            app=InputBotAppShortName(bot_id=chat, short_name="app"),
+            platform='android',
+            write_allowed=True,
+        ))
+    auth_url = web_view.url
+    tg_web_app_data = unquote(
+        string=unquote(string=auth_url.split('tgWebAppData=')[1].split('&tgWebAppVersion')[0]))
+    return tg_web_app_data, auth_url
+
+
+async def _get_horizon(client, data):
+    chat = await client.get_input_entity('HorizonLaunch_bot')
+    if data["referralCode"] is not None:
+        web_view = await client(functions.messages.RequestAppWebViewRequest(
+            peer='me',
+            app=InputBotAppShortName(bot_id=chat, short_name="HorizonLaunch"),
+            platform='android',
+            write_allowed=True,
+            start_param=data["referralCode"]
+        ))
+    else:
+        web_view = await client(functions.messages.RequestAppWebViewRequest(
+            peer='me',
+            app=InputBotAppShortName(bot_id=chat, short_name="HorizonLaunch"),
+            platform='android',
+            write_allowed=True,
+        ))
+    auth_url = web_view.url
+    tg_web_app_data = unquote(
+        string=unquote(string=auth_url.split('tgWebAppData=')[1].split('&tgWebAppVersion')[0]))
+    return tg_web_app_data, auth_url
+
+
 async def _get_tg_web_app_data(data, proxy_dict):
     client = None
     try:
@@ -367,6 +413,10 @@ async def _get_tg_web_app_data(data, proxy_dict):
             tg_web_app_data, auth_url = await _get_cats(client, data)
         elif data["service"] == "major":
             tg_web_app_data, auth_url = await _get_major(client, data)
+        elif data["service"] == "tonstation":
+            tg_web_app_data, auth_url = await _get_tonstation(client, data)
+        elif data["service"] == "horizon":
+            tg_web_app_data, auth_url = await _get_horizon(client, data)
         else:
             tg_web_app_data, auth_url = None, None
 
