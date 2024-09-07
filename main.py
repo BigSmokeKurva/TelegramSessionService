@@ -14,6 +14,7 @@ from telethon import TelegramClient, functions
 from telethon.errors import PhoneNumberInvalidError
 from telethon.tl.functions.account import UpdateNotifySettingsRequest
 from telethon.tl.functions.channels import GetParticipantRequest
+from telethon.tl.functions.users import GetFullUserRequest
 from telethon.tl.types import InputPeerNotifySettings, NotificationSoundNone, InputBotAppShortName
 from unidecode import unidecode
 
@@ -386,6 +387,29 @@ async def _get_horizon(client, data):
     return tg_web_app_data, auth_url
 
 
+async def _get_busers(client, data):
+    chat = await client.get_input_entity('b_usersbot')
+    if data["referralCode"] is not None:
+        web_view = await client(functions.messages.RequestAppWebViewRequest(
+            peer='me',
+            app=InputBotAppShortName(bot_id=chat, short_name="join"),
+            platform='android',
+            write_allowed=True,
+            start_param=data["referralCode"]
+        ))
+    else:
+        web_view = await client(functions.messages.RequestAppWebViewRequest(
+            peer='me',
+            app=InputBotAppShortName(bot_id=chat, short_name="join"),
+            platform='android',
+            write_allowed=True,
+        ))
+    auth_url = web_view.url
+    tg_web_app_data = unquote(
+        string=unquote(string=auth_url.split('tgWebAppData=')[1].split('&tgWebAppVersion')[0]))
+    return tg_web_app_data, auth_url
+
+
 async def _get_tg_web_app_data(data, proxy_dict):
     client = None
     try:
@@ -417,6 +441,8 @@ async def _get_tg_web_app_data(data, proxy_dict):
             tg_web_app_data, auth_url = await _get_tonstation(client, data)
         elif data["service"] == "horizon":
             tg_web_app_data, auth_url = await _get_horizon(client, data)
+        elif data["service"] == "busers":
+            tg_web_app_data, auth_url = await _get_busers(client, data)
         else:
             tg_web_app_data, auth_url = None, None
 
@@ -477,6 +503,7 @@ async def join_channels(request: Request):
     try:
         try:
             data = await request.json()
+            print(data)
             if data['apiJson'] is not None:
                 data['apiJson'] = proccess_api_json(json.loads(data['apiJson']))
             split_proxy = data['proxy'].split(':')
@@ -571,6 +598,121 @@ async def save_tdata(request: Request):
         return JSONResponse({"status": "session_invalid"})
     except Exception as e:
         print(e)
+        return JSONResponse({"status": "session_invalid"})
+
+
+
+@app.post("/api/addDiamond")
+async def add_bone(request: Request):
+    client = None
+    try:
+        try:
+            data = await request.json()
+            if data['apiJson'] is not None:
+                data['apiJson'] = proccess_api_json(json.loads(data['apiJson']))
+            split_proxy = data['proxy'].split(':')
+            proxy_dict = {
+                "proxy_type": python_socks.ProxyType.SOCKS5 if split_proxy[
+                                                                   0] == 'socks5' else python_socks.ProxyType.HTTP,
+                "addr": split_proxy[1],
+                "port": int(split_proxy[2]),
+                "username": split_proxy[3],
+                "password": split_proxy[4],
+                'rdns': True
+            }
+            client = await _get_client(data, proxy_dict)
+            await client.start(phone='0')
+            user = await client(GetFullUserRequest('me'))
+            me = await client.get_me()
+            if (me.first_name and "💎" in me.first_name) or (me.last_name and "💎" in me.last_name):
+                await client.disconnect()
+                return JSONResponse({"status": "success"})
+            if me.first_name:
+                first_name = me.first_name + "💎"
+                last_name = me.last_name
+            else:
+                first_name = me.first_name
+                last_name = me.last_name + "💎"
+            await client(functions.account.UpdateProfileRequest(first_name=first_name, last_name=last_name,
+                                                                about=user.full_user.about))
+            await client.disconnect()
+            return JSONResponse({"status": "success"})
+        except Exception as e:
+            try:
+                if client is not None:
+                    await client.disconnect()
+                    client = None
+            except Exception as ex:
+                pass
+            print(str(e))
+            with open("error.txt", "a") as f:
+                f.write(str(e) + "\n")
+            raise e
+        return JSONResponse({"status": "success"})
+    except ConnectionError:
+        return JSONResponse({"status": "proxy_error"})
+    except asyncio.TimeoutError:
+        return JSONResponse({"status": "proxy_error"})
+    except (TDesktopUnauthorized, OpenTeleException, PhoneNumberInvalidError, ApiJsonError):
+        return JSONResponse({"status": "session_invalid"})
+    except Exception as e:
+        return JSONResponse({"status": "session_invalid"})
+
+
+@app.post("/api/removeDiamond")
+async def remove_bone(request: Request):
+    client = None
+    try:
+        try:
+            data = await request.json()
+            if data['apiJson'] is not None:
+                data['apiJson'] = proccess_api_json(json.loads(data['apiJson']))
+            split_proxy = data['proxy'].split(':')
+            proxy_dict = {
+                "proxy_type": python_socks.ProxyType.SOCKS5 if split_proxy[
+                                                                   0] == 'socks5' else python_socks.ProxyType.HTTP,
+                "addr": split_proxy[1],
+                "port": int(split_proxy[2]),
+                "username": split_proxy[3],
+                "password": split_proxy[4],
+                'rdns': True
+            }
+            client = await _get_client(data, proxy_dict)
+            await client.start(phone='0')
+            user = await client(GetFullUserRequest('me'))
+            me = await client.get_me()
+            if (me.first_name and "💎" not in me.first_name) or (me.last_name and "💎" not in me.last_name):
+                await client.disconnect()
+                return JSONResponse({"status": "success"})
+            if me.first_name:
+                first_name = me.first_name.replace("💎", "")
+                last_name = me.last_name
+            else:
+                first_name = me.first_name
+                last_name = me.last_name.replace("💎", "")
+            await client(functions.account.UpdateProfileRequest(first_name=first_name, last_name=last_name,
+                                                                about=user.full_user.about))
+            await client.disconnect()
+            return JSONResponse({"status": "success"})
+        except Exception as e:
+            try:
+                if client is not None:
+                    await client.disconnect()
+                    client = None
+            except Exception as ex:
+                pass
+            print(str(e))
+            with open("error.txt", "a") as f:
+                f.write(str(e) + "\n")
+            raise e
+        return JSONResponse({"status": "success"})
+    except ConnectionError:
+        return JSONResponse({"status": "proxy_error"})
+    except asyncio.TimeoutError:
+        return JSONResponse({"status": "proxy_error"})
+    except (TDesktopUnauthorized, OpenTeleException, PhoneNumberInvalidError, ApiJsonError):
+        return JSONResponse({"status": "session_invalid"})
+    except Exception as e:
         return JSONResponse({"status": "session_invalid"})
 
 
