@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import os
 import random
 import re
@@ -8,6 +9,7 @@ from random import choice
 from urllib.parse import unquote
 
 import python_socks
+from PyQt5.uic.Compiler.qobjectcreator import logger
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from telethon import TelegramClient, functions
@@ -19,7 +21,7 @@ from telethon.tl.types import InputPeerNotifySettings, NotificationSoundNone, In
 from unidecode import unidecode
 
 from openteleMain.src.api import UseCurrentSession
-from openteleMain.src.exception import TDesktopUnauthorized, OpenTeleException
+from openteleMain.src.exception import OpenTeleException, TDesktopUnauthorized
 from openteleMain.src.td import TDesktop
 
 
@@ -27,19 +29,163 @@ class ApiJsonError(Exception):
     pass
 
 
-app = FastAPI()
+class ProxyError(Exception):
+    pass
+
+
+class SessionInvalidError(Exception):
+    pass
+
+
+class UnknownError(Exception):
+    status_code: int
+    detail: str
+
+    def __init__(self, status_code: int, detail: str):
+        self.status_code = status_code
+        self.detail = detail
+
+
+app = FastAPI(debug=False)
+
+logging.getLogger('telethon').setLevel(logging.ERROR)
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 SYSTEM_VERSIONS = ["Windows 10", "Windows 11"]
 APP_VERSIONS = [
+    "5.5.1"
     "5.3.1", "5.3.0", "5.2.3, ""5.2.2",
     "5.2.0", "5.1.8", "5.1.7", "5.1.6", "5.1.5", "5.1.4", "5.1.3", "5.1.2", "5.1.1", "5.1.0",
-    "5.0.0", "4.16.10", "4.16.9", "4.16.8", "4.16.7", "4.16.6", "4.16.5", "4.16.4", "4.16.3",
-    "4.16.2", "4.16.1", "4.16.0"
+    "5.0.0",
 ]
 DEFAULT_MUTE_SETTINGS = InputPeerNotifySettings(
     silent=True,
     sound=NotificationSoundNone()
 )
+
+
+@app.exception_handler(Exception)
+def handle_exceptions(request: Request, e):
+    string_exception = str(e)
+    # proxy error
+    if isinstance(e, ConnectionError) or "ConnectionError" in string_exception:
+        return proxy_error_handler(ProxyError("Failed to connect to proxy"))
+    elif isinstance(e, asyncio.TimeoutError):
+        return proxy_error_handler(ProxyError("Proxy connection timed out"))
+    elif "The authorization key (session file) was used under two" in string_exception:
+        return proxy_error_handler(ProxyError("Session file was used under two different keys"))
+    # session error
+    elif isinstance(e, PhoneNumberInvalidError) or "The phone number is invalid" in string_exception:
+        return session_invalid_error_handler(SessionInvalidError(string_exception))
+    elif isinstance(
+            e, SessionInvalidError) or "SessionInvalidError" in string_exception:
+        return session_invalid_error_handler(SessionInvalidError(string_exception))
+    elif isinstance(e,
+                    OpenTeleException) or "OpenTeleException" in string_exception:
+        return session_invalid_error_handler(SessionInvalidError(string_exception))
+    elif isinstance(e, ApiJsonError):
+        return session_invalid_error_handler(SessionInvalidError(string_exception))
+    elif isinstance(e,
+                    TDesktopUnauthorized) or "TDesktopUnauthorized" in string_exception:
+        return session_invalid_error_handler(SessionInvalidError(string_exception))
+    # other errors
+    else:
+        logger.error(f"Unexpected error: {string_exception}")
+        return unknown_exception_handler(UnknownError(status_code=200, detail=string_exception))
+
+
+def proxy_error_handler(exc: Exception):
+    return JSONResponse(
+        status_code=200,
+        content={"status": "proxy_error", "detail": str(exc)},
+    )
+
+
+def session_invalid_error_handler(exc: SessionInvalidError):
+    return JSONResponse(
+        status_code=200,
+        content={"status": "session_invalid", "detail": str(exc)},
+    )
+
+
+def unknown_exception_handler(exc: UnknownError):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"status": "unknown_error", "detail": exc.detail},
+    )
+
+
+async def handle_bot_start(client, bot_name, referral_code):
+    chat = await client.get_input_entity(bot_name)
+    messages = await client.get_messages(chat, limit=1)
+    if not len(messages):
+        if referral_code is None or referral_code == "":
+            await client.send_message(bot_name, '/start')
+        else:
+            await client.send_message(bot_name, '/start ' + referral_code)
+
+
+async def request_web_view(client, peer, bot, url, referral_code=None):
+    if referral_code is not None:
+        web_view = await client(functions.messages.RequestWebViewRequest(
+            peer=peer,
+            bot=bot,
+            platform='android',
+            from_bot_menu=True,
+            url=url,
+            start_param=referral_code
+        ))
+    else:
+        web_view = await client(functions.messages.RequestWebViewRequest(
+            peer=peer,
+            bot=bot,
+            platform='android',
+            from_bot_menu=True,
+            url=url
+        ))
+    auth_url = web_view.url
+    tg_web_app_data = unquote(
+        string=unquote(string=auth_url.split('tgWebAppData=')[1].split('&tgWebAppVersion')[0]))
+    return tg_web_app_data, auth_url
+
+
+async def request_app_web_view(client, bot_name, short_name, referral_code=None):
+    chat = await client.get_input_entity(bot_name)
+    if referral_code is not None:
+        web_view = await client(functions.messages.RequestAppWebViewRequest(
+            peer='me',
+            app=InputBotAppShortName(bot_id=chat, short_name=short_name),
+            platform='android',
+            write_allowed=True,
+            start_param=referral_code
+        ))
+    else:
+        web_view = await client(functions.messages.RequestAppWebViewRequest(
+            peer='me',
+            app=InputBotAppShortName(bot_id=chat, short_name=short_name),
+            platform='android',
+            write_allowed=True,
+        ))
+    auth_url = web_view.url
+    tg_web_app_data = unquote(
+        string=unquote(string=auth_url.split('tgWebAppData=')[1].split('&tgWebAppVersion')[0]))
+    return tg_web_app_data, auth_url
+
+
+def process_data_and_proxy(data):
+    if data['apiJson'] is not None:
+        data['apiJson'] = proccess_api_json(json.loads(data['apiJson']))
+    split_proxy = data['proxy'].split(':')
+    proxy_dict = {
+        "proxy_type": python_socks.ProxyType.SOCKS5 if split_proxy[0] == 'socks5' else python_socks.ProxyType.HTTP,
+        "addr": split_proxy[1],
+        "port": int(split_proxy[2]),
+        "username": split_proxy[3],
+        "password": split_proxy[4],
+        'rdns': True
+    }
+    return data, proxy_dict
 
 
 def proccess_api_json(api_json):
@@ -65,7 +211,7 @@ def proccess_api_json(api_json):
         raise ApiJsonError()
 
     if "system_version" not in api_json:
-        api_json["system_version"] = ""
+        api_json["system_version"] = get_system_version()
 
     if "app_version" not in api_json:
         raise ApiJsonError()
@@ -90,7 +236,7 @@ def get_app_version():
     return choice(APP_VERSIONS) + " x64"
 
 
-async def _get_client(data, proxy_dict):
+async def _get_client(data, proxy_dict) -> TelegramClient:
     if data['sessionType'] == 'tdata':
         tdata = TDesktop(os.path.join(data['pathDirectory'], data['id']))
         tdata.api.system_version = get_system_version()
@@ -143,8 +289,9 @@ async def _get_client(data, proxy_dict):
     return client
 
 
-async def set_username_if_not_exists(client):
-    me = await client.get_me()
+async def set_username_if_not_exists(client, me=None):
+    if me is None:
+        me = await client.get_me()
     if me.username is None:
         username = generate_username(me.first_name, me.last_name)
         await client(functions.account.UpdateUsernameRequest(username))
@@ -154,566 +301,251 @@ async def set_username_if_not_exists(client):
 
 
 async def _get_blum(client, data):
-    if data["referralCode"] is not None:
-        web_view = await client(functions.messages.RequestWebViewRequest(
-            peer='BlumCryptoBot',
-            bot='BlumCryptoBot',
-            platform='android',
-            from_bot_menu=True,
-            url="https://telegram.blum.codes/",
-            start_param=data["referralCode"]
-        ))
-    else:
-        web_view = await client(functions.messages.RequestWebViewRequest(
-            peer='BlumCryptoBot',
-            bot='BlumCryptoBot',
-            platform='android',
-            from_bot_menu=True,
-            url="https://telegram.blum.codes/"
-        ))
-
-    auth_url = web_view.url
-    tg_web_app_data = unquote(
-        string=unquote(string=auth_url.split('tgWebAppData=')[1].split('&tgWebAppVersion')[0]))
-    return tg_web_app_data, auth_url
+    return await request_web_view(client, 'BlumCryptoBot', 'BlumCryptoBot', "https://telegram.blum.codes/",
+                                  data.get("referralCode"))
 
 
 async def _get_iceberg(client, data):
-    try:
-        chat = await client.get_input_entity('IcebergAppBot')
-        messages = await client.get_messages(chat, limit=1)
-        if not len(messages):
-            if data["referralCode"] is None or data["referralCode"] == "":
-                await client.send_message('IcebergAppBot', '/start')
-            else:
-                await client.send_message('IcebergAppBot', '/start ' + data["referralCode"])
-    except:
-        pass
-    web_view = await client(functions.messages.RequestWebViewRequest(
-        peer='IcebergAppBot',
-        bot='IcebergAppBot',
-        platform='android',
-        from_bot_menu=True,
-        url='https://0xiceberg.com/webapp/',
-    ))
-    auth_url = web_view.url
-    tg_web_app_data = unquote(
-        string=unquote(string=auth_url.split('tgWebAppData=')[1].split('&tgWebAppVersion')[0]))
-    return tg_web_app_data, auth_url
+    await handle_bot_start(client, 'IcebergAppBot', data.get("referralCode"))
+    return await request_web_view(client, 'IcebergAppBot', 'IcebergAppBot', 'https://0xiceberg.com/webapp/', None)
 
 
 async def _get_tapswap(client, data):
-    try:
-        chat = await client.get_input_entity('tapswap_bot')
-        messages = await client.get_messages(chat, limit=1)
-        if not len(messages):
-            if data["referralCode"] is None or data["referralCode"] == "":
-                await client.send_message('tapswap_bot', '/start')
-            else:
-                await client.send_message('tapswap_bot', '/start ' + data["referralCode"])
-    except:
-        pass
-    web_view = await client(functions.messages.RequestWebViewRequest(
-        peer='tapswap_bot',
-        bot='tapswap_bot',
-        platform='android',
-        from_bot_menu=True,
-        url='https://app.tapswap.club/',
-    ))
-    auth_url = web_view.url
-    tg_web_app_data = unquote(
-        string=unquote(string=auth_url.split('tgWebAppData=')[1].split('&tgWebAppVersion')[0]))
-    return tg_web_app_data, auth_url
+    await handle_bot_start(client, 'tapswap_bot', data.get("referralCode"))
+    return await request_web_view(client, 'tapswap_bot', 'tapswap_bot', 'https://app.tapswap.club/', None)
 
 
 async def _get_banana(client, data):
-    chat = await client.get_input_entity('OfficialBananaBot')
+    referral_code = None
     if data["referralCode"] is not None:
-        web_view = await client(functions.messages.RequestAppWebViewRequest(
-            peer='me',
-            app=InputBotAppShortName(bot_id=chat, short_name="banana"),
-            platform='android',
-            write_allowed=True,
-            start_param="referral=" + data["referralCode"]
-        ))
-    else:
-        web_view = await client(functions.messages.RequestAppWebViewRequest(
-            peer='me',
-            app=InputBotAppShortName(bot_id=chat, short_name="banana"),
-            platform='android',
-            write_allowed=True,
-        ))
-    auth_url = web_view.url
-    tg_web_app_data = unquote(
-        string=unquote(string=auth_url.split('tgWebAppData=')[1].split('&tgWebAppVersion')[0]))
-    return tg_web_app_data, auth_url
+        referral_code = "referral=" + data["referralCode"]
+    return await request_app_web_view(client, 'OfficialBananaBot', 'banana', referral_code)
 
 
 async def _get_onewin(client, data):
-    chat = await client.get_input_entity('token1win_bot')
-    if data["referralCode"] is not None:
-        web_view = await client(functions.messages.RequestAppWebViewRequest(
-            peer='me',
-            app=InputBotAppShortName(bot_id=chat, short_name="start"),
-            platform='android',
-            write_allowed=True,
-            start_param=data["referralCode"]
-        ))
-    else:
-        web_view = await client(functions.messages.RequestAppWebViewRequest(
-            peer='me',
-            app=InputBotAppShortName(bot_id=chat, short_name="start"),
-            platform='android',
-            write_allowed=True,
-        ))
-    auth_url = web_view.url
-    tg_web_app_data = unquote(
-        string=unquote(string=auth_url.split('tgWebAppData=')[1].split('&tgWebAppVersion')[0]))
-    return tg_web_app_data, auth_url
+    return await request_app_web_view(client, 'token1win_bot', 'start', data.get("referralCode"))
 
 
 async def _get_clayton(client, data):
-    chat = await client.get_input_entity('claytoncoinbot')
-    if data["referralCode"] is not None:
-        web_view = await client(functions.messages.RequestAppWebViewRequest(
-            peer='me',
-            app=InputBotAppShortName(bot_id=chat, short_name="game"),
-            platform='android',
-            write_allowed=True,
-            start_param=data["referralCode"]
-        ))
-    else:
-        web_view = await client(functions.messages.RequestAppWebViewRequest(
-            peer='me',
-            app=InputBotAppShortName(bot_id=chat, short_name="game"),
-            platform='android',
-            write_allowed=True,
-        ))
-    auth_url = web_view.url
-    tg_web_app_data = unquote(
-        string=unquote(string=auth_url.split('tgWebAppData=')[1].split('&tgWebAppVersion')[0]))
-    return tg_web_app_data, auth_url
+    return await request_app_web_view(client, 'claytoncoinbot', 'game', data.get("referralCode"))
 
 
 async def _get_cats(client, data):
-    chat = await client.get_input_entity('catsgang_bot')
-    if data["referralCode"] is not None:
-        web_view = await client(functions.messages.RequestAppWebViewRequest(
-            peer='me',
-            app=InputBotAppShortName(bot_id=chat, short_name="join"),
-            platform='android',
-            write_allowed=True,
-            start_param=data["referralCode"]
-        ))
-    else:
-        web_view = await client(functions.messages.RequestAppWebViewRequest(
-            peer='me',
-            app=InputBotAppShortName(bot_id=chat, short_name="join"),
-            platform='android',
-            write_allowed=True,
-        ))
-    auth_url = web_view.url
-    tg_web_app_data = unquote(
-        string=unquote(string=auth_url.split('tgWebAppData=')[1].split('&tgWebAppVersion')[0]))
-    return tg_web_app_data, auth_url
+    return await request_app_web_view(client, 'catsgang_bot', 'join', data.get("referralCode"))
 
 
 async def _get_major(client, data):
-    chat = await client.get_input_entity('major')
-    if data["referralCode"] is not None:
-        web_view = await client(functions.messages.RequestAppWebViewRequest(
-            peer='me',
-            app=InputBotAppShortName(bot_id=chat, short_name="start"),
-            platform='android',
-            write_allowed=True,
-            start_param=data["referralCode"]
-        ))
-    else:
-        web_view = await client(functions.messages.RequestAppWebViewRequest(
-            peer='me',
-            app=InputBotAppShortName(bot_id=chat, short_name="start"),
-            platform='android',
-            write_allowed=True,
-        ))
-    auth_url = web_view.url
-    tg_web_app_data = unquote(
-        string=unquote(string=auth_url.split('tgWebAppData=')[1].split('&tgWebAppVersion')[0]))
-    return tg_web_app_data, auth_url
+    return await request_app_web_view(client, 'major', 'start', data.get("referralCode"))
 
 
 async def _get_tonstation(client, data):
-    chat = await client.get_input_entity('tonstationgames_bot')
-    if data["referralCode"] is not None:
-        web_view = await client(functions.messages.RequestAppWebViewRequest(
-            peer='me',
-            app=InputBotAppShortName(bot_id=chat, short_name="app"),
-            platform='android',
-            write_allowed=True,
-            start_param=data["referralCode"]
-        ))
-    else:
-        web_view = await client(functions.messages.RequestAppWebViewRequest(
-            peer='me',
-            app=InputBotAppShortName(bot_id=chat, short_name="app"),
-            platform='android',
-            write_allowed=True,
-        ))
-    auth_url = web_view.url
-    tg_web_app_data = unquote(
-        string=unquote(string=auth_url.split('tgWebAppData=')[1].split('&tgWebAppVersion')[0]))
-    return tg_web_app_data, auth_url
+    return await request_app_web_view(client, 'tonstationgames_bot', 'app', data.get("referralCode"))
 
 
 async def _get_horizon(client, data):
-    chat = await client.get_input_entity('HorizonLaunch_bot')
-    if data["referralCode"] is not None:
-        web_view = await client(functions.messages.RequestAppWebViewRequest(
-            peer='me',
-            app=InputBotAppShortName(bot_id=chat, short_name="HorizonLaunch"),
-            platform='android',
-            write_allowed=True,
-            start_param=data["referralCode"]
-        ))
+    return await request_app_web_view(client, 'HorizonLaunch_bot', 'HorizonLaunch', data.get("referralCode"))
+
+
+async def _get_buser(client, data):
+    return await request_app_web_view(client, 'b_usersbot', 'join', data.get("referralCode"))
+
+
+service_map = {
+    "blum": _get_blum,
+    "iceberg": _get_iceberg,
+    "tapswap": _get_tapswap,
+    "onewin": _get_onewin,
+    "banana": _get_banana,
+    "clayton": _get_clayton,
+    "cats": _get_cats,
+    "major": _get_major,
+    "tonstation": _get_tonstation,
+    "horizon": _get_horizon,
+    "buser": _get_buser
+}
+
+
+async def _get_tg_web_app_data(client, data):
+    await client.start(phone='0')
+    if data["isUpload"] and data["sessionType"] == "telethon":
+        tdata = await client.ToTDesktop(flag=UseCurrentSession)
+        tdata.SaveTData(os.path.join(data['pathDirectory'], data["id"]))
+    me = await client.get_me()
+    await set_username_if_not_exists(client, me)
+
+    service_func = service_map.get(data["service"])
+    if service_func:
+        tg_web_app_data, auth_url = await service_func(client, data)
     else:
-        web_view = await client(functions.messages.RequestAppWebViewRequest(
-            peer='me',
-            app=InputBotAppShortName(bot_id=chat, short_name="HorizonLaunch"),
-            platform='android',
-            write_allowed=True,
-        ))
-    auth_url = web_view.url
-    tg_web_app_data = unquote(
-        string=unquote(string=auth_url.split('tgWebAppData=')[1].split('&tgWebAppVersion')[0]))
-    return tg_web_app_data, auth_url
+        raise UnknownError(400, f"Service '{data['service']}' not found in service map")
 
-
-async def _get_busers(client, data):
-    chat = await client.get_input_entity('b_usersbot')
-    if data["referralCode"] is not None:
-        web_view = await client(functions.messages.RequestAppWebViewRequest(
-            peer='me',
-            app=InputBotAppShortName(bot_id=chat, short_name="join"),
-            platform='android',
-            write_allowed=True,
-            start_param=data["referralCode"]
-        ))
-    else:
-        web_view = await client(functions.messages.RequestAppWebViewRequest(
-            peer='me',
-            app=InputBotAppShortName(bot_id=chat, short_name="join"),
-            platform='android',
-            write_allowed=True,
-        ))
-    auth_url = web_view.url
-    tg_web_app_data = unquote(
-        string=unquote(string=auth_url.split('tgWebAppData=')[1].split('&tgWebAppVersion')[0]))
-    return tg_web_app_data, auth_url
-
-
-async def _get_tg_web_app_data(data, proxy_dict):
-    client = None
-    try:
-        client = await _get_client(data, proxy_dict)
-        await client.start(phone='0')
-        if data["isUpload"] and data["sessionType"] == "telethon":
-            tdata = await client.ToTDesktop(flag=UseCurrentSession)
-            tdata.SaveTData(os.path.join(data['pathDirectory'], data["id"]))
-        await set_username_if_not_exists(client)
-        me = await client.get_me()
-
-        if data["service"] == "blum":
-            tg_web_app_data, auth_url = await _get_blum(client, data)
-        elif data["service"] == "iceberg":
-            tg_web_app_data, auth_url = await _get_iceberg(client, data)
-        elif data["service"] == "tapswap":
-            tg_web_app_data, auth_url = await _get_tapswap(client, data)
-        elif data["service"] == "onewin":
-            tg_web_app_data, auth_url = await _get_onewin(client, data)
-        elif data["service"] == "banana":
-            tg_web_app_data, auth_url = await _get_banana(client, data)
-        elif data["service"] == "clayton":
-            tg_web_app_data, auth_url = await _get_clayton(client, data)
-        elif data["service"] == "cats":
-            tg_web_app_data, auth_url = await _get_cats(client, data)
-        elif data["service"] == "major":
-            tg_web_app_data, auth_url = await _get_major(client, data)
-        elif data["service"] == "tonstation":
-            tg_web_app_data, auth_url = await _get_tonstation(client, data)
-        elif data["service"] == "horizon":
-            tg_web_app_data, auth_url = await _get_horizon(client, data)
-        elif data["service"] == "busers":
-            tg_web_app_data, auth_url = await _get_busers(client, data)
-        else:
-            tg_web_app_data, auth_url = None, None
-
-        await client.disconnect()
-        return JSONResponse(
-            {
-                "status": "success",
-                "tgWebAppData": tg_web_app_data,
-                'authUrl': auth_url,
-                "number": me.phone,
-                "apiJson": json.dumps(data['apiJson']),
-                'username': me.username
-            })
-    except Exception as e:
-        try:
-            if client is not None:
-                await client.disconnect()
-                client = None
-        except Exception as ex:
-            pass
-        print(str(e))
-        with open("error.txt", "a") as f:
-            f.write(str(e) + "\n")
-        if "ConnectionError" in str(e):
-            raise ConnectionError
-        raise e
+    return JSONResponse(
+        {
+            "status": "success",
+            "tgWebAppData": tg_web_app_data,
+            'authUrl': auth_url,
+            "number": me.phone,
+            "apiJson": json.dumps(data['apiJson']),
+            'username': me.username
+        })
 
 
 @app.post("/api/getTgWebAppData")
 async def get_tg_web_app_data(request: Request):
     data = await request.json()
-    if data['apiJson'] is not None:
-        data['apiJson'] = proccess_api_json(json.loads(data['apiJson']))
-    split_proxy = data['proxy'].split(':')
-    proxy_dict = {
-        "proxy_type": python_socks.ProxyType.SOCKS5 if split_proxy[0] == 'socks5' else python_socks.ProxyType.HTTP,
-        "addr": split_proxy[1],
-        "port": int(split_proxy[2]),
-        "username": split_proxy[3],
-        "password": split_proxy[4],
-        'rdns': True
-    }
+    data, proxy_dict = process_data_and_proxy(data)
+
+    client = None
     try:
-        return await asyncio.wait_for(_get_tg_web_app_data(data, proxy_dict), timeout=20)
-    except ConnectionError:
-        return JSONResponse({"status": "proxy_error"})
-    except asyncio.TimeoutError:
-        return JSONResponse({"status": "proxy_error"})
-    except (TDesktopUnauthorized, OpenTeleException, PhoneNumberInvalidError, ApiJsonError):
-        return JSONResponse({"status": "session_invalid"})
+        client = await asyncio.wait_for(_get_client(data, proxy_dict), timeout=20)
+        return await asyncio.wait_for(_get_tg_web_app_data(client, data), timeout=20)
     except Exception as e:
-        return JSONResponse({"status": "session_invalid"})
+        raise e
+    finally:
+        if client:
+            try:
+                await client.disconnect()
+            except:
+                pass
+
+
+async def _join_channels(client, data):
+    await client.start(phone='0')
+    me = await client.get_me()
+    for channel in data['channels']:
+        if not channel:
+            continue
+        channel = await client.get_entity(channel)
+        try:
+            await client(GetParticipantRequest(channel, me.id))
+        except:
+            try:
+                await client(functions.channels.JoinChannelRequest(channel))
+                await client(UpdateNotifySettingsRequest(
+                    peer=channel,
+                    settings=DEFAULT_MUTE_SETTINGS
+                ))
+                await client.edit_folder(channel, 1)
+            except Exception as e:
+                if "You have joined too many channels/supergroups" not in str(e):
+                    raise e
+    return JSONResponse({"status": "success"})
 
 
 @app.post("/api/joinChannels")
 async def join_channels(request: Request):
+    data = await request.json()
+    data, proxy_dict = process_data_and_proxy(data)
+
     client = None
     try:
-        try:
-            data = await request.json()
-            print(data)
-            if data['apiJson'] is not None:
-                data['apiJson'] = proccess_api_json(json.loads(data['apiJson']))
-            split_proxy = data['proxy'].split(':')
-            proxy_dict = {
-                "proxy_type": python_socks.ProxyType.SOCKS5 if split_proxy[
-                                                                   0] == 'socks5' else python_socks.ProxyType.HTTP,
-                "addr": split_proxy[1],
-                "port": int(split_proxy[2]),
-                "username": split_proxy[3],
-                "password": split_proxy[4],
-                'rdns': True
-            }
-            client = await _get_client(data, proxy_dict)
-            await client.start(phone='0')
-            me = await client.get_me()
+        client = await asyncio.wait_for(_get_client(data, proxy_dict), timeout=20)
+        return await asyncio.wait_for(_join_channels(client, data), timeout=20)
+    except Exception as e:
+        raise e
+    finally:
+        if client:
             try:
-                for channel in data['channels']:
-                    channel = await client.get_entity(channel)
-                    try:
-                        await client(GetParticipantRequest(channel, me.id))
-                    except:
-                        await client(functions.channels.JoinChannelRequest(channel))
-                        await client(UpdateNotifySettingsRequest(
-                            peer=channel,
-                            settings=DEFAULT_MUTE_SETTINGS
-                        ))
-                        await client.edit_folder(channel, 1)
+                await client.disconnect()
             except:
                 pass
-            await client.disconnect()
-        except Exception as e:
-            try:
-                if client is not None:
-                    await client.disconnect()
-                    client = None
-            except Exception as ex:
-                pass
-            print(str(e))
-            with open("error.txt", "a") as f:
-                f.write(str(e) + "\n")
-            raise e
-        return JSONResponse({"status": "success"})
-    except ConnectionError:
-        return JSONResponse({"status": "proxy_error"})
-    except asyncio.TimeoutError:
-        return JSONResponse({"status": "proxy_error"})
-    except (TDesktopUnauthorized, OpenTeleException, PhoneNumberInvalidError, ApiJsonError):
-        return JSONResponse({"status": "session_invalid"})
-    except Exception as e:
-        return JSONResponse({"status": "session_invalid"})
+
+
+async def _createTData(client, data):
+    tdata = await client.ToTDesktop(flag=UseCurrentSession)
+    tdata.save(data['pathDirectory'])
+    return JSONResponse({"status": "success"})
 
 
 @app.post("/api/createTData")
-async def save_tdata(request: Request):
+async def createTData(request: Request):
+    data = await request.json()
+    data, proxy_dict = process_data_and_proxy(data)
+
     client = None
     try:
-        try:
-            data = await request.json()
-            if data['apiJson'] is not None:
-                data['apiJson'] = proccess_api_json(json.loads(data['apiJson']))
-            split_proxy = data['proxy'].split(':')
-            proxy_dict = {
-                "proxy_type": python_socks.ProxyType.SOCKS5 if split_proxy[
-                                                                   0] == 'socks5' else python_socks.ProxyType.HTTP,
-                "addr": split_proxy[1],
-                "port": int(split_proxy[2]),
-                "username": split_proxy[3],
-                "password": split_proxy[4],
-                'rdns': True
-            }
-            client = await _get_client(data, proxy_dict)
-            tdata = await client.ToTDesktop(flag=UseCurrentSession)
-            tdata.SaveTData(os.path.join(data['pathDirectory'], data["directoryName"]))
-            await client.disconnect()
-            return JSONResponse({"status": "success"})
-        except Exception as e:
-            try:
-                if client is not None:
-                    await client.disconnect()
-                    client = None
-            except Exception as ex:
-                pass
-            print(str(e))
-            with open("error.txt", "a") as f:
-                f.write(str(e) + "\n")
-            raise e
-    except ConnectionError:
-        return JSONResponse({"status": "proxy_error"})
-    except asyncio.TimeoutError:
-        return JSONResponse({"status": "proxy_error"})
-    except (TDesktopUnauthorized, OpenTeleException, PhoneNumberInvalidError, ApiJsonError):
-        return JSONResponse({"status": "session_invalid"})
+        client = await asyncio.wait_for(_get_client(data, proxy_dict), timeout=20)
+        return await asyncio.wait_for(_createTData(client, data), timeout=20)
     except Exception as e:
-        print(e)
-        return JSONResponse({"status": "session_invalid"})
+        raise e
+    finally:
+        if client:
+            try:
+                await client.disconnect()
+            except:
+                pass
 
+
+async def add_diamond(client, data):
+    await client.start(phone='0')
+    me = await client.get_me()
+    user = await client(GetFullUserRequest('me'))
+    if (me.first_name and "💎" in me.first_name) or (me.last_name and "💎" in me.last_name):
+        await client.disconnect()
+        return JSONResponse({"status": "success"})
+    if me.first_name:
+        first_name = me.first_name + "💎"
+        last_name = me.last_name
+    else:
+        first_name = me.first_name
+        last_name = me.last_name + "💎"
+    await client(functions.account.UpdateProfileRequest(first_name=first_name, last_name=last_name,
+                                                        about=user.full_user.about))
 
 
 @app.post("/api/addDiamond")
-async def add_bone(request: Request):
+async def add_diamond(request: Request):
+    data = await request.json()
+    data, proxy_dict = process_data_and_proxy(data)
+
     client = None
     try:
-        try:
-            data = await request.json()
-            if data['apiJson'] is not None:
-                data['apiJson'] = proccess_api_json(json.loads(data['apiJson']))
-            split_proxy = data['proxy'].split(':')
-            proxy_dict = {
-                "proxy_type": python_socks.ProxyType.SOCKS5 if split_proxy[
-                                                                   0] == 'socks5' else python_socks.ProxyType.HTTP,
-                "addr": split_proxy[1],
-                "port": int(split_proxy[2]),
-                "username": split_proxy[3],
-                "password": split_proxy[4],
-                'rdns': True
-            }
-            client = await _get_client(data, proxy_dict)
-            await client.start(phone='0')
-            user = await client(GetFullUserRequest('me'))
-            me = await client.get_me()
-            if (me.first_name and "💎" in me.first_name) or (me.last_name and "💎" in me.last_name):
-                await client.disconnect()
-                return JSONResponse({"status": "success"})
-            if me.first_name:
-                first_name = me.first_name + "💎"
-                last_name = me.last_name
-            else:
-                first_name = me.first_name
-                last_name = me.last_name + "💎"
-            await client(functions.account.UpdateProfileRequest(first_name=first_name, last_name=last_name,
-                                                                about=user.full_user.about))
-            await client.disconnect()
-            return JSONResponse({"status": "success"})
-        except Exception as e:
-            try:
-                if client is not None:
-                    await client.disconnect()
-                    client = None
-            except Exception as ex:
-                pass
-            print(str(e))
-            with open("error.txt", "a") as f:
-                f.write(str(e) + "\n")
-            raise e
-        return JSONResponse({"status": "success"})
-    except ConnectionError:
-        return JSONResponse({"status": "proxy_error"})
-    except asyncio.TimeoutError:
-        return JSONResponse({"status": "proxy_error"})
-    except (TDesktopUnauthorized, OpenTeleException, PhoneNumberInvalidError, ApiJsonError):
-        return JSONResponse({"status": "session_invalid"})
+        client = await asyncio.wait_for(_get_client(data, proxy_dict), timeout=20)
+        return await asyncio.wait_for(add_diamond(client, data), timeout=20)
     except Exception as e:
-        return JSONResponse({"status": "session_invalid"})
+        raise e
+    finally:
+        if client:
+            try:
+                await client.disconnect()
+            except:
+                pass
+
+
+async def _remove_diamond(client, data):
+    await client.start(phone='0')
+    me = await client.get_me()
+    user = await client(GetFullUserRequest('me'))
+    if (me.first_name and "💎" not in me.first_name) or (me.last_name and "💎" not in me.last_name):
+        await client.disconnect()
+        return JSONResponse({"status": "success"})
+    if me.first_name:
+        first_name = me.first_name.replace("💎", "")
+        last_name = me.last_name
+    else:
+        first_name = me.first_name
+        last_name = me.last_name.replace("💎", "")
+    await client(functions.account.UpdateProfileRequest(first_name=first_name, last_name=last_name,
+                                                        about=user.full_user.about))
 
 
 @app.post("/api/removeDiamond")
-async def remove_bone(request: Request):
+async def remove_diamond(request: Request):
+    data = await request.json()
+    data, proxy_dict = process_data_and_proxy(data)
+
     client = None
     try:
-        try:
-            data = await request.json()
-            if data['apiJson'] is not None:
-                data['apiJson'] = proccess_api_json(json.loads(data['apiJson']))
-            split_proxy = data['proxy'].split(':')
-            proxy_dict = {
-                "proxy_type": python_socks.ProxyType.SOCKS5 if split_proxy[
-                                                                   0] == 'socks5' else python_socks.ProxyType.HTTP,
-                "addr": split_proxy[1],
-                "port": int(split_proxy[2]),
-                "username": split_proxy[3],
-                "password": split_proxy[4],
-                'rdns': True
-            }
-            client = await _get_client(data, proxy_dict)
-            await client.start(phone='0')
-            user = await client(GetFullUserRequest('me'))
-            me = await client.get_me()
-            if (me.first_name and "💎" not in me.first_name) or (me.last_name and "💎" not in me.last_name):
-                await client.disconnect()
-                return JSONResponse({"status": "success"})
-            if me.first_name:
-                first_name = me.first_name.replace("💎", "")
-                last_name = me.last_name
-            else:
-                first_name = me.first_name
-                last_name = me.last_name.replace("💎", "")
-            await client(functions.account.UpdateProfileRequest(first_name=first_name, last_name=last_name,
-                                                                about=user.full_user.about))
-            await client.disconnect()
-            return JSONResponse({"status": "success"})
-        except Exception as e:
-            try:
-                if client is not None:
-                    await client.disconnect()
-                    client = None
-            except Exception as ex:
-                pass
-            print(str(e))
-            with open("error.txt", "a") as f:
-                f.write(str(e) + "\n")
-            raise e
-        return JSONResponse({"status": "success"})
-    except ConnectionError:
-        return JSONResponse({"status": "proxy_error"})
-    except asyncio.TimeoutError:
-        return JSONResponse({"status": "proxy_error"})
-    except (TDesktopUnauthorized, OpenTeleException, PhoneNumberInvalidError, ApiJsonError):
-        return JSONResponse({"status": "session_invalid"})
+        client = await asyncio.wait_for(_get_client(data, proxy_dict), timeout=20)
+        return await asyncio.wait_for(_remove_diamond(client, data), timeout=20)
     except Exception as e:
-        return JSONResponse({"status": "session_invalid"})
+        raise e
+    finally:
+        if client:
+            try:
+                await client.disconnect()
+            except:
+                pass
 
 
 def generate_username(first_name=None, last_name=None):
@@ -735,4 +567,42 @@ def generate_username(first_name=None, last_name=None):
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="127.0.0.1", port=5000)
+    log_config = {
+        "version": 1,
+        "disable_existing_loggers": False,
+        "formatters": {
+            "default": {
+                "()": "uvicorn.logging.DefaultFormatter",
+                "fmt": "%(levelprefix)s %(message)s",
+                "use_colors": True,
+            },
+        },
+        "handlers": {
+            "default": {
+                "formatter": "default",
+                "class": "logging.StreamHandler",
+                "stream": "ext://sys.stdout",
+            },
+        },
+        "loggers": {
+            "uvicorn": {
+                "level": "INFO",  # Уровень для общего логгера uvicorn
+                "handlers": ["default"],
+                "propagate": False,
+            },
+            "uvicorn.error": {
+                "level": "CRITICAL",  # Отключаем логи уровня ERROR
+                "handlers": ["default"],
+                "propagate": False,
+            },
+            "uvicorn.access": {
+                "level": "INFO",  # Логи доступа
+                "handlers": ["default"],
+                "propagate": False,
+            },
+        },
+    }
+
+    logger.info("Started 127.0.0.1:5000")
+    # Запуск uvicorn с кастомной конфигурацией логирования
+    uvicorn.run(app, host="127.0.0.1", port=5000, log_config=log_config)
