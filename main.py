@@ -86,9 +86,18 @@ def handle_exceptions(request: Request, e):
         return session_invalid_error_handler(SessionInvalidError(string_exception))
     elif isinstance(e, ApiJsonError):
         return session_invalid_error_handler(SessionInvalidError(string_exception))
+
     elif isinstance(e,
                     TDesktopUnauthorized) or "TDesktopUnauthorized" in string_exception:
         return session_invalid_error_handler(SessionInvalidError(string_exception))
+    elif "bytes read on a total" in string_exception:
+        return session_invalid_error_handler(SessionInvalidError(string_exception))
+    # ignore
+    elif "JoinChannelRequest" in string_exception:
+        return JSONResponse(
+            status_code=200,
+            content={"status": "success"},
+        )
     # other errors
     else:
         logger.error(f"Unexpected error: {string_exception}")
@@ -346,7 +355,7 @@ async def _get_horizon(client, data):
     return await request_app_web_view(client, 'HorizonLaunch_bot', 'HorizonLaunch', data.get("referralCode"))
 
 
-async def _get_buser(client, data):
+async def _get_busers(client, data):
     return await request_app_web_view(client, 'b_usersbot', 'join', data.get("referralCode"))
 
 
@@ -361,7 +370,7 @@ service_map = {
     "major": _get_major,
     "tonstation": _get_tonstation,
     "horizon": _get_horizon,
-    "buser": _get_buser
+    "busers": _get_busers
 }
 
 
@@ -386,7 +395,9 @@ async def _get_tg_web_app_data(client, data):
             'authUrl': auth_url,
             "number": me.phone,
             "apiJson": json.dumps(data['apiJson']),
-            'username': me.username
+            'username': me.username,
+            'isPremium': me.premium,
+            'userId': me.id
         })
 
 
