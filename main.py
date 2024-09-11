@@ -13,7 +13,7 @@ from PyQt5.uic.Compiler.qobjectcreator import logger
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from telethon import TelegramClient, functions
-from telethon.errors import PhoneNumberInvalidError
+from telethon.errors import PhoneNumberInvalidError, ApiIdPublishedFloodError, ApiIdInvalidError
 from telethon.tl.functions.account import UpdateNotifySettingsRequest
 from telethon.tl.functions.channels import GetParticipantRequest
 from telethon.tl.functions.users import GetFullUserRequest
@@ -89,6 +89,12 @@ def handle_exceptions(request: Request, e):
 
     elif isinstance(e,
                     TDesktopUnauthorized) or "TDesktopUnauthorized" in string_exception:
+        return session_invalid_error_handler(SessionInvalidError(string_exception))
+    elif isinstance(e,
+                    ApiIdPublishedFloodError) or "This API id w" in string_exception:
+        return session_invalid_error_handler(SessionInvalidError(string_exception))
+    elif isinstance(e,
+                    ApiIdInvalidError):
         return session_invalid_error_handler(SessionInvalidError(string_exception))
     elif "bytes read on a total" in string_exception:
         return session_invalid_error_handler(SessionInvalidError(string_exception))
@@ -302,11 +308,36 @@ async def set_username_if_not_exists(client, me=None):
     if me is None:
         me = await client.get_me()
     if me.username is None:
-        username = generate_username(me.first_name, me.last_name)
-        await client(functions.account.UpdateUsernameRequest(username))
-        me = await client.get_me()
-        if me.username is None:
-            raise Exception("Username not set")
+        try:
+            username = generate_username(me.first_name, me.last_name)
+            await client(functions.account.UpdateUsernameRequest(username))
+            me = await client.get_me()
+            if me.username is None:
+                raise Exception("Username not set")
+            return
+        except:
+            try:
+                username = generate_username(me.first_name, me.last_name, numbersRange=[0, 99])
+                await client(functions.account.UpdateUsernameRequest(username))
+                me = await client.get_me()
+                if me.username is None:
+                    raise Exception("Username not set")
+                return
+            except:
+                try:
+                    username = generate_username()
+                    await client(functions.account.UpdateUsernameRequest(username))
+                    me = await client.get_me()
+                    if me.username is None:
+                        raise Exception("Username not set")
+                    return
+                except:
+                    username = generate_username(numbersRange=[1000, 100000000])
+                    await client(functions.account.UpdateUsernameRequest(username))
+                    me = await client.get_me()
+                    if me.username is None:
+                        raise Exception("Username not set")
+                    return
 
 
 async def _get_blum(client, data):
@@ -559,20 +590,39 @@ async def remove_diamond(request: Request):
                 pass
 
 
-def generate_username(first_name=None, last_name=None):
-    base_username = "_".join(
-        part.lower().replace(" ", "_") for part in (first_name, last_name) if part
-    )
+def generate_username(first_name=None, last_name=None, numbersRange=None):
+    regex = r'^[a-zA-Z][\w\d]{3,30}[a-zA-Z\d]$'
 
-    if not base_username:
-        base_username = ''.join(random.choices(string.ascii_lowercase, k=8))
+    def create_base_username():
+        base_username = "_".join(
+            part.lower().replace(" ", "_") for part in (first_name, last_name) if part
+        )
+        if random.randint(0, 1):
+            base_username = base_username.replace("_", "")
 
-    base_username = unidecode(base_username)
-    username = base_username + str(random.randint(100, 2000))
+        if not base_username:
+            base_username = ''.join(random.choices(string.ascii_lowercase, k=8))
 
-    username = re.sub(r'[^a-zA-Z0-9_]', '', username)[:30]
+        base_username = unidecode(base_username)
 
-    return username
+        return base_username
+
+    while True:
+        base_username = create_base_username()
+
+        username = re.sub(r'[^a-zA-Z0-9_]', '', base_username)[:28]
+
+        suffix = ""
+        if numbersRange is not None:
+            if numbersRange[0] == -1:
+                suffix = str(random.randint(1, 99))
+            else:
+                suffix = str(random.randint(numbersRange[0], numbersRange[1]))
+        username = username + suffix
+
+        username = username[:30]
+        if re.match(regex, username):
+            return username
 
 
 if __name__ == "__main__":
