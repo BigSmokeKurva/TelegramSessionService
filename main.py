@@ -607,22 +607,22 @@ def generate_username(first_name=None, last_name=None, numbersRange=None):
 
         return base_username
 
-    while True:
-        base_username = create_base_username()
+    base_username = create_base_username()
 
-        username = re.sub(r'[^a-zA-Z0-9_]', '', base_username)[:28]
+    username = re.sub(r'[^a-zA-Z0-9_]', '', base_username)[:28]
 
-        suffix = ""
-        if numbersRange is not None:
-            if numbersRange[0] == -1:
-                suffix = str(random.randint(1, 99))
-            else:
-                suffix = str(random.randint(numbersRange[0], numbersRange[1]))
-        username = username + suffix
+    suffix = ""
+    if numbersRange is not None:
+        if numbersRange[0] == -1:
+            suffix = str(random.randint(1, 99))
+        else:
+            suffix = str(random.randint(numbersRange[0], numbersRange[1]))
+    username = username + suffix
 
-        username = username[:30]
-        if re.match(regex, username):
-            return username
+    username = username[:30]
+    if re.match(regex, username):
+        return username
+    raise Exception("Bad username generated")
 
 
 if __name__ == "__main__":
