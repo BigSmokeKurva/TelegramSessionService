@@ -518,7 +518,7 @@ async def createTData(request: Request):
                 pass
 
 
-async def add_diamond(client, data):
+async def _add_diamond(client):
     await client.start(phone='0')
     me = await client.get_me()
     user = await client(GetFullUserRequest('me'))
@@ -543,7 +543,7 @@ async def add_diamond(request: Request):
     client = None
     try:
         client = await asyncio.wait_for(_get_client(data, proxy_dict), timeout=20)
-        return await asyncio.wait_for(add_diamond(client, data), timeout=20)
+        return await asyncio.wait_for(_add_diamond(client), timeout=20)
     except Exception as e:
         raise e
     finally:
@@ -554,7 +554,7 @@ async def add_diamond(request: Request):
                 pass
 
 
-async def _remove_diamond(client, data):
+async def _remove_diamond(client):
     await client.start(phone='0')
     me = await client.get_me()
     user = await client(GetFullUserRequest('me'))
@@ -579,7 +579,7 @@ async def remove_diamond(request: Request):
     client = None
     try:
         client = await asyncio.wait_for(_get_client(data, proxy_dict), timeout=20)
-        return await asyncio.wait_for(_remove_diamond(client, data), timeout=20)
+        return await asyncio.wait_for(_remove_diamond(client), timeout=20)
     except Exception as e:
         raise e
     finally:
