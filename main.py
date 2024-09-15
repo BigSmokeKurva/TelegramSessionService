@@ -390,6 +390,10 @@ async def _get_busers(client, data):
     return await request_app_web_view(client, 'b_usersbot', 'join', data.get("referralCode"))
 
 
+async def _get_cows(client, data):
+    return await request_app_web_view(client, "RealCowsHouse_bot", "cowshouse", data.get("referralCode"))
+
+
 service_map = {
     "blum": _get_blum,
     "iceberg": _get_iceberg,
@@ -401,7 +405,8 @@ service_map = {
     "major": _get_major,
     "tonstation": _get_tonstation,
     "horizon": _get_horizon,
-    "busers": _get_busers
+    "busers": _get_busers,
+    "cows": _get_cows
 }
 
 
@@ -523,7 +528,6 @@ async def _add_diamond(client):
     me = await client.get_me()
     user = await client(GetFullUserRequest('me'))
     if (me.first_name and "💎" in me.first_name) or (me.last_name and "💎" in me.last_name):
-        await client.disconnect()
         return JSONResponse({"status": "success"})
     if me.first_name:
         first_name = me.first_name + "💎"
@@ -559,7 +563,6 @@ async def _remove_diamond(client):
     me = await client.get_me()
     user = await client(GetFullUserRequest('me'))
     if (me.first_name and "💎" not in me.first_name) or (me.last_name and "💎" not in me.last_name):
-        await client.disconnect()
         return JSONResponse({"status": "success"})
     if me.first_name:
         first_name = me.first_name.replace("💎", "")
