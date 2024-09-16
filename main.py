@@ -231,8 +231,11 @@ def proccess_api_json(api_json):
     if "app_version" not in api_json:
         raise ApiJsonError()
 
-    if "system_lang_code" not in api_json:
+    if "system_lang_code" not in api_json and "lang_code" not in api_json:
         raise ApiJsonError()
+
+    if "system_lang_code" not in api_json:
+        api_json["system_lang_code"] = api_json["lang_code"]
 
     if "lang_code" not in api_json:
         api_json["lang_code"] = api_json["system_lang_code"]
