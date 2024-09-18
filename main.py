@@ -127,7 +127,7 @@ async def session_invalid_error_handler(exc: SessionInvalidError, request: Reque
 async def unknown_exception_handler(exc: UnknownError, request: Request):
     return JSONResponse(
         status_code=exc.status_code,
-        content={"status": "unknown_error", "detail": str(exc), "data": await get_body_as_string(request)},
+        content={"status": "unknown_error", "detail": exc.detail, "data": await get_body_as_string(request)},
     )
 
 
