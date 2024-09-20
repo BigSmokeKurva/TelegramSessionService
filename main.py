@@ -132,7 +132,7 @@ async def unknown_exception_handler(exc: UnknownError, request: Request):
 
 
 async def get_body_as_string(request: Request) -> str:
-    body = await request.body()
+    body = request.state.body
     return body.decode('utf-8')
 
 
@@ -146,12 +146,12 @@ async def handle_bot_start(client, bot_name, referral_code):
             await client.send_message(bot_name, '/start ' + referral_code)
 
 
-async def request_web_view(client, peer, bot, url, referral_code=None):
+async def request_web_view(client, peer, bot, url, platform, referral_code=None):
     if referral_code is not None:
         web_view = await client(functions.messages.RequestWebViewRequest(
             peer=peer,
             bot=bot,
-            platform='android',
+            platform=platform,
             from_bot_menu=True,
             url=url,
             start_param=referral_code
@@ -160,7 +160,7 @@ async def request_web_view(client, peer, bot, url, referral_code=None):
         web_view = await client(functions.messages.RequestWebViewRequest(
             peer=peer,
             bot=bot,
-            platform='android',
+            platform=platform,
             from_bot_menu=True,
             url=url
         ))
@@ -170,13 +170,13 @@ async def request_web_view(client, peer, bot, url, referral_code=None):
     return tg_web_app_data, auth_url
 
 
-async def request_app_web_view(client, bot_name, short_name, referral_code=None):
+async def request_app_web_view(client, bot_name, short_name, platform, referral_code=None):
     chat = await client.get_input_entity(bot_name)
     if referral_code is not None:
         web_view = await client(functions.messages.RequestAppWebViewRequest(
             peer='me',
             app=InputBotAppShortName(bot_id=chat, short_name=short_name),
-            platform='android',
+            platform=platform,
             write_allowed=True,
             start_param=referral_code
         ))
@@ -184,7 +184,7 @@ async def request_app_web_view(client, bot_name, short_name, referral_code=None)
         web_view = await client(functions.messages.RequestAppWebViewRequest(
             peer='me',
             app=InputBotAppShortName(bot_id=chat, short_name=short_name),
-            platform='android',
+            platform=platform,
             write_allowed=True,
         ))
     auth_url = web_view.url
@@ -194,8 +194,9 @@ async def request_app_web_view(client, bot_name, short_name, referral_code=None)
 
 
 def process_data_and_proxy(data):
-    if data['apiJson'] is not None:
-        data['apiJson'] = proccess_api_json(json.loads(data['apiJson']))
+    if data['apiJson'] is None:
+        raise ApiJsonError()
+    data['apiJson'] = proccess_api_json(json.loads(data['apiJson']))
     split_proxy = data['proxy'].split(':')
     proxy_dict = {
         "proxy_type": python_socks.ProxyType.SOCKS5 if split_proxy[0] == 'socks5' else python_socks.ProxyType.HTTP,
@@ -350,52 +351,62 @@ async def set_username_if_not_exists(client, me=None):
 
 async def _get_blum(client, data):
     return await request_web_view(client, 'BlumCryptoBot', 'BlumCryptoBot', "https://telegram.blum.codes/",
+                                  data.get("tgIdentification"),
                                   data.get("referralCode"))
 
 
 async def _get_iceberg(client, data):
     await handle_bot_start(client, 'IcebergAppBot', data.get("referralCode"))
-    return await request_web_view(client, 'IcebergAppBot', 'IcebergAppBot', 'https://0xiceberg.com/webapp/', None)
+    return await request_web_view(client, 'IcebergAppBot', 'IcebergAppBot', 'https://0xiceberg.com/webapp/',
+                                  data.get("tgIdentification"), None)
 
 
 async def _get_tapswap(client, data):
     await handle_bot_start(client, 'tapswap_bot', data.get("referralCode"))
-    return await request_web_view(client, 'tapswap_bot', 'tapswap_bot', 'https://app.tapswap.club/', None)
+    return await request_web_view(client, 'tapswap_bot', 'tapswap_bot', 'https://app.tapswap.club/',
+                                  data.get("tgIdentification"), None)
 
 
 async def _get_banana(client, data):
     referral_code = None
     if data["referralCode"] is not None:
         referral_code = "referral=" + data["referralCode"]
-    return await request_app_web_view(client, 'OfficialBananaBot', 'banana', referral_code)
+    return await request_app_web_view(client, 'OfficialBananaBot', 'banana', data.get("tgIdentification"),
+                                      referral_code)
 
 
 async def _get_onewin(client, data):
-    return await request_app_web_view(client, 'token1win_bot', 'start', data.get("referralCode"))
+    return await request_app_web_view(client, 'token1win_bot', 'start', data.get("tgIdentification"),
+                                      data.get("referralCode"))
 
 
 async def _get_clayton(client, data):
-    return await request_app_web_view(client, 'claytoncoinbot', 'game', data.get("referralCode"))
+    return await request_app_web_view(client, 'claytoncoinbot', 'game', data.get("tgIdentification"),
+                                      data.get("referralCode"))
 
 
 async def _get_cats(client, data):
-    return await request_app_web_view(client, 'catsgang_bot', 'join', data.get("referralCode"))
+    return await request_app_web_view(client, 'catsgang_bot', 'join', data.get("tgIdentification"),
+                                      data.get("referralCode"))
 
 
 async def _get_major(client, data):
-    return await request_app_web_view(client, 'major', 'start', data.get("referralCode"))
+    return await request_app_web_view(client, 'major', 'start', data.get("tgIdentification"), data.get("referralCode"))
 
 
 async def _get_tonstation(client, data):
-    return await request_app_web_view(client, 'tonstationgames_bot', 'app', data.get("referralCode"))
+    return await request_app_web_view(client, 'tonstationgames_bot', 'app', data.get("tgIdentification"),
+                                      data.get("referralCode"))
 
 
 async def _get_horizon(client, data):
-    return await request_app_web_view(client, 'HorizonLaunch_bot', 'HorizonLaunch', data.get("referralCode"))
+    return await request_app_web_view(client, 'HorizonLaunch_bot', 'HorizonLaunch', data.get("tgIdentification"),
+                                      data.get("referralCode"))
 
 
 async def _get_busers(client, data):
-    return await request_app_web_view(client, 'b_usersbot', 'join', data.get("referralCode"))
+    return await request_app_web_view(client, 'b_usersbot', 'join', data.get("tgIdentification"),
+                                      data.get("referralCode"))
 
 
 service_map = {
@@ -444,7 +455,6 @@ async def _get_tg_web_app_data(client, data):
 async def get_tg_web_app_data(request: Request):
     data = await request.json()
     data, proxy_dict = process_data_and_proxy(data)
-
     client = None
     try:
         client = await asyncio.wait_for(_get_client(data, proxy_dict), timeout=20)
@@ -594,6 +604,13 @@ async def remove_diamond(request: Request):
                 await client.disconnect()
             except:
                 pass
+
+
+@app.middleware("http")
+async def capture_request_body(request: Request, call_next):
+    request.state.body = await request.body()
+    response = await call_next(request)
+    return response
 
 
 def generate_username(first_name=None, last_name=None, numbersRange=None):
