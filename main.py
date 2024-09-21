@@ -98,6 +98,8 @@ async def handle_exceptions(request: Request, e):
         return await session_invalid_error_handler(SessionInvalidError(string_exception), request)
     elif "bytes read on a total" in string_exception:
         return await session_invalid_error_handler(SessionInvalidError(string_exception), request)
+    elif "(caused by SendCodeRequest)" in string_exception:
+        return await session_invalid_error_handler(SessionInvalidError(string_exception), request)
     # ignore
     elif "JoinChannelRequest" in string_exception:
         return JSONResponse(
@@ -425,7 +427,11 @@ service_map = {
 
 
 async def _get_tg_web_app_data(client, data):
-    await client.start(phone='0')
+    # await client.start(phone='0')
+    if not client.is_connected():
+        await client.connect()
+    if not await client.is_user_authorized():
+        raise SessionInvalidError()
     if data["isUpload"] and data["sessionType"] == "telethon":
         tdata = await client.ToTDesktop(flag=UseCurrentSession)
         tdata.SaveTData(os.path.join(data['pathDirectory'], data["id"]))
@@ -470,7 +476,10 @@ async def get_tg_web_app_data(request: Request):
 
 
 async def _join_channels(client, data):
-    await client.start(phone='0')
+    if not client.is_connected():
+        await client.connect()
+    if not await client.is_user_authorized():
+        raise SessionInvalidError()
     me = await client.get_me()
     for channel in data['channels']:
         if not channel:
@@ -537,7 +546,10 @@ async def createTData(request: Request):
 
 
 async def _add_diamond(client):
-    await client.start(phone='0')
+    if not client.is_connected():
+        await client.connect()
+    if not await client.is_user_authorized():
+        raise SessionInvalidError()
     me = await client.get_me()
     user = await client(GetFullUserRequest('me'))
     if (me.first_name and "💎" in me.first_name) or (me.last_name and "💎" in me.last_name):
@@ -572,7 +584,10 @@ async def add_diamond(request: Request):
 
 
 async def _remove_diamond(client):
-    await client.start(phone='0')
+    if not client.is_connected():
+        await client.connect()
+    if not await client.is_user_authorized():
+        raise SessionInvalidError()
     me = await client.get_me()
     user = await client(GetFullUserRequest('me'))
     if (me.first_name and "💎" not in me.first_name) or (me.last_name and "💎" not in me.last_name):
