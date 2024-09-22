@@ -303,19 +303,26 @@ async def _get_client(data, proxy_dict) -> TelegramClient:
             "pid": tdata.api.pid
         })
     else:
-        client = TelegramClient(
-            session=os.path.join(data['pathDirectory'], data['id']) + ".session",
-            api_id=data['apiJson']['api_id'],
-            api_hash=data['apiJson']['api_hash'],
-            device_model=data['apiJson']['device_model'],
-            system_version=data['apiJson']['system_version'],
-            app_version=data['apiJson']['app_version'],
-            lang_code=data['apiJson']['lang_code'],
-            receive_updates=False,
-            proxy=proxy_dict,
-            auto_reconnect=False,
-            connection_retries=0
-        )
+        for i in range(0, 3):
+            try:
+                client = TelegramClient(
+                    session=os.path.join(data['pathDirectory'], data['id']) + ".session",
+                    api_id=data['apiJson']['api_id'],
+                    api_hash=data['apiJson']['api_hash'],
+                    device_model=data['apiJson']['device_model'],
+                    system_version=data['apiJson']['system_version'],
+                    app_version=data['apiJson']['app_version'],
+                    lang_code=data['apiJson']['lang_code'],
+                    receive_updates=False,
+                    proxy=proxy_dict,
+                    auto_reconnect=False,
+                    connection_retries=0
+                )
+                break
+            except Exception as e:
+                if i == 2:
+                    raise e
+                await asyncio.sleep(0.3)
 
     return client
 
@@ -616,6 +623,82 @@ async def remove_diamond(request: Request):
     try:
         client = await asyncio.wait_for(_get_client(data, proxy_dict), timeout=20)
         return await asyncio.wait_for(_remove_diamond(client), timeout=20)
+    except Exception as e:
+        raise e
+    finally:
+        if client:
+            try:
+                await client.disconnect()
+            except:
+                pass
+
+
+async def _add_cat(client):
+    if not client.is_connected():
+        await client.connect()
+    if not await client.is_user_authorized():
+        raise SessionInvalidError()
+    me = await client.get_me()
+    user = await client(GetFullUserRequest('me'))
+    if (me.first_name and "🐈‍⬛" in me.first_name) or (me.last_name and "🐈‍⬛" in me.last_name):
+        return JSONResponse({"status": "success"})
+    if me.first_name:
+        first_name = me.first_name + "🐈‍⬛"
+        last_name = me.last_name
+    else:
+        first_name = me.first_name
+        last_name = me.last_name + "🐈‍⬛"
+    await client(functions.account.UpdateProfileRequest(first_name=first_name, last_name=last_name,
+                                                        about=user.full_user.about))
+
+
+@app.post("/api/addCat")
+async def add_cat(request: Request):
+    data = await request.json()
+    data, proxy_dict = process_data_and_proxy(data)
+
+    client = None
+    try:
+        client = await asyncio.wait_for(_get_client(data, proxy_dict), timeout=20)
+        return await asyncio.wait_for(_add_cat(client), timeout=20)
+    except Exception as e:
+        raise e
+    finally:
+        if client:
+            try:
+                await client.disconnect()
+            except:
+                pass
+
+
+async def _remove_cat(client):
+    if not client.is_connected():
+        await client.connect()
+    if not await client.is_user_authorized():
+        raise SessionInvalidError()
+    me = await client.get_me()
+    user = await client(GetFullUserRequest('me'))
+    if (me.first_name and "🐈‍⬛" not in me.first_name) or (me.last_name and "🐈‍⬛" not in me.last_name):
+        return JSONResponse({"status": "success"})
+    if me.first_name:
+        first_name = me.first_name.replace("🐈‍⬛", "")
+        last_name = me.last_name
+    else:
+        first_name = me.first_name
+        last_name = me.last_name.replace("🐈‍⬛", "")
+    await client(functions.account.UpdateProfileRequest(first_name=first_name, last_name=last_name,
+                                                        about=user.full_user.about))
+
+
+@app.post("/api/removeCat")
+async def remove_cat(request: Request):
+    data = await request.json()
+    data, proxy_dict = process_data_and_proxy(data)
+
+    client = None
+    try:
+        client = await asyncio.wait_for(_get_client(data, proxy_dict), timeout=20)
+        return await asyncio.wait_for(_remove_cat(client), timeout=20)
     except Exception as e:
         raise e
     finally:
