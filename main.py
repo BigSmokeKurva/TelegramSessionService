@@ -70,36 +70,40 @@ async def handle_exceptions(request: Request, e):
     string_exception = str(e)
     # proxy error
     if isinstance(e, ConnectionError) or "ConnectionError" in string_exception:
-        return await proxy_error_handler(ProxyError("Failed to connect to proxy"), request)
+        return proxy_error_handler(ProxyError("Failed to connect to proxy"), request)
     elif isinstance(e, asyncio.TimeoutError):
-        return await proxy_error_handler(ProxyError("Proxy connection timed out"), request)
+        return proxy_error_handler(ProxyError("Proxy connection timed out"), request)
     elif "The authorization key (session file) was used under two" in string_exception:
-        return await proxy_error_handler(ProxyError("Session file was used under two different keys"), request)
+        return proxy_error_handler(ProxyError("Session file was used under two different keys"), request)
     # session error
     elif isinstance(e, PhoneNumberInvalidError) or "The phone number is invalid" in string_exception:
-        return await session_invalid_error_handler(SessionInvalidError(string_exception), request)
+        return session_invalid_error_handler(SessionInvalidError(string_exception), request)
     elif isinstance(
             e, SessionInvalidError) or "SessionInvalidError" in string_exception:
-        return await session_invalid_error_handler(SessionInvalidError(string_exception), request)
+        return session_invalid_error_handler(SessionInvalidError(string_exception), request)
     elif isinstance(e,
                     OpenTeleException) or "OpenTeleException" in string_exception:
-        return await session_invalid_error_handler(SessionInvalidError(string_exception), request)
+        return session_invalid_error_handler(SessionInvalidError(string_exception), request)
     elif isinstance(e, ApiJsonError):
-        return await session_invalid_error_handler(SessionInvalidError(string_exception), request)
+        return session_invalid_error_handler(SessionInvalidError(string_exception), request)
 
     elif isinstance(e,
                     TDesktopUnauthorized) or "TDesktopUnauthorized" in string_exception:
-        return await session_invalid_error_handler(SessionInvalidError(string_exception), request)
+        return session_invalid_error_handler(SessionInvalidError(string_exception), request)
     elif isinstance(e,
                     ApiIdPublishedFloodError) or "This API id w" in string_exception:
-        return await session_invalid_error_handler(SessionInvalidError(string_exception), request)
+        return session_invalid_error_handler(SessionInvalidError(string_exception), request)
     elif isinstance(e,
                     ApiIdInvalidError):
-        return await session_invalid_error_handler(SessionInvalidError(string_exception), request)
+        return session_invalid_error_handler(SessionInvalidError(string_exception), request)
     elif "bytes read on a total" in string_exception:
-        return await session_invalid_error_handler(SessionInvalidError(string_exception), request)
+        return session_invalid_error_handler(SessionInvalidError(string_exception), request)
     elif "(caused by SendCodeRequest)" in string_exception:
-        return await session_invalid_error_handler(SessionInvalidError(string_exception), request)
+        return session_invalid_error_handler(SessionInvalidError(string_exception), request)
+    elif "(caused by UpdateUsernameRequest)" in string_exception:
+        return session_invalid_error_handler(SessionInvalidError(string_exception), request)
+    elif "(caused by RequestWebViewRequest)" in string_exception:
+        return session_invalid_error_handler(SessionInvalidError(string_exception), request)
     # ignore
     elif "JoinChannelRequest" in string_exception:
         return JSONResponse(
@@ -112,28 +116,28 @@ async def handle_exceptions(request: Request, e):
         return await unknown_exception_handler(UnknownError(status_code=200, detail=string_exception), request)
 
 
-async def proxy_error_handler(exc: ProxyError, request: Request):
+def proxy_error_handler(exc: ProxyError, request: Request):
     return JSONResponse(
         status_code=200,
-        content={"status": "proxy_error", "detail": str(exc), "data": await get_body_as_string(request)},
+        content={"status": "proxy_error", "detail": str(exc), "data": get_body_as_string(request)},
     )
 
 
-async def session_invalid_error_handler(exc: SessionInvalidError, request: Request):
+def session_invalid_error_handler(exc: SessionInvalidError, request: Request):
     return JSONResponse(
         status_code=200,
-        content={"status": "session_invalid", "detail": str(exc), "data": await get_body_as_string(request)},
+        content={"status": "session_invalid", "detail": str(exc), "data": get_body_as_string(request)},
     )
 
 
-async def unknown_exception_handler(exc: UnknownError, request: Request):
+def unknown_exception_handler(exc: UnknownError, request: Request):
     return JSONResponse(
         status_code=exc.status_code,
-        content={"status": "unknown_error", "detail": exc.detail, "data": await get_body_as_string(request)},
+        content={"status": "unknown_error", "detail": exc.detail, "data": get_body_as_string(request)},
     )
 
 
-async def get_body_as_string(request: Request) -> str:
+def get_body_as_string(request: Request) -> str:
     body = request.state.body
     return body.decode('utf-8')
 
@@ -196,9 +200,10 @@ async def request_app_web_view(client, bot_name, short_name, platform, referral_
 
 
 def process_data_and_proxy(data):
-    if data['apiJson'] is None:
+    if data['apiJson'] is None and data['sessionType'] == 'telethon':
         raise ApiJsonError()
-    data['apiJson'] = proccess_api_json(json.loads(data['apiJson']))
+    if data['apiJson'] is not None:
+        data['apiJson'] = proccess_api_json(json.loads(data['apiJson']))
     split_proxy = data['proxy'].split(':')
     proxy_dict = {
         "proxy_type": python_socks.ProxyType.SOCKS5 if split_proxy[0] == 'socks5' else python_socks.ProxyType.HTTP,
