@@ -423,6 +423,11 @@ async def _get_busers(client, data):
                                       data.get("referralCode"))
 
 
+async def _get_catsdogs(client, data):
+    return await request_app_web_view(client, 'catsdogs_game_bot', 'join', data.get("tgIdentification"),
+                                      data.get("referralCode"))
+
+
 service_map = {
     "blum": _get_blum,
     "iceberg": _get_iceberg,
@@ -435,6 +440,7 @@ service_map = {
     "tonstation": _get_tonstation,
     "horizon": _get_horizon,
     "busers": _get_busers,
+    "catsdogs": _get_catsdogs
 }
 
 
