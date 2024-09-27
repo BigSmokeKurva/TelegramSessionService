@@ -244,11 +244,12 @@ def proccess_api_json(api_json):
     if "app_version" not in api_json:
         raise ApiJsonError()
 
-    if "system_lang_code" not in api_json and "lang_code" not in api_json:
-        raise ApiJsonError()
-
-    if "system_lang_code" not in api_json:
+    if "system_lang_code" not in api_json and "lang_code" in api_json:
         api_json["system_lang_code"] = api_json["lang_code"]
+    elif "system_lang_code" not in api_json and "system_lang_pack" in api_json:
+        api_json["system_lang_code"] = api_json["system_lang_pack"]
+    elif "system_lang_code" not in api_json:
+        raise ApiJsonError()
 
     if "lang_code" not in api_json:
         api_json["lang_code"] = api_json["system_lang_code"]
@@ -303,7 +304,7 @@ async def _get_client(data, proxy_dict) -> TelegramClient:
             "pid": tdata.api.pid
         })
     else:
-        for i in range(0, 3):
+        for i in range(0, 4):
             try:
                 client = TelegramClient(
                     session=os.path.join(data['pathDirectory'], data['id']) + ".session",
@@ -322,7 +323,7 @@ async def _get_client(data, proxy_dict) -> TelegramClient:
             except Exception as e:
                 if i == 2:
                     raise e
-                await asyncio.sleep(0.3)
+                await asyncio.sleep(0.4)
 
     return client
 
@@ -428,6 +429,16 @@ async def _get_catsdogs(client, data):
                                       data.get("referralCode"))
 
 
+async def _get_notpixel(client, data):
+    return await request_app_web_view(client, 'notpixel', 'app', data.get("tgIdentification"),
+                                      data.get("referralCode"))
+
+
+async def _get_notgames(client, data):
+    return await request_app_web_view(client, 'notgames_bot', 'squads', data.get("tgIdentification"),
+                                      data.get("referralCode"))
+
+
 service_map = {
     "blum": _get_blum,
     "iceberg": _get_iceberg,
@@ -440,7 +451,9 @@ service_map = {
     "tonstation": _get_tonstation,
     "horizon": _get_horizon,
     "busers": _get_busers,
-    "catsdogs": _get_catsdogs
+    "catsdogs": _get_catsdogs,
+    "notpixel": _get_notpixel,
+    "notgames": _get_notgames
 }
 
 
