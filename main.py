@@ -515,8 +515,8 @@ async def _join_channels(client, data):
     for channel in data['channels']:
         if not channel:
             continue
-        channel = await client.get_entity(channel)
         try:
+            channel = await client.get_entity(channel)
             await client(GetParticipantRequest(channel, me.id))
         except:
             try:
@@ -527,8 +527,9 @@ async def _join_channels(client, data):
                 ))
                 await client.edit_folder(channel, 1)
             except Exception as e:
-                if "You have joined too many channels/supergroups" not in str(e):
-                    raise e
+                pass
+                # if "You have joined too many channels/supergroups" not in str(e):
+                #    raise e
     return JSONResponse({"status": "success"})
 
 
@@ -718,6 +719,33 @@ async def remove_cat(request: Request):
     try:
         client = await asyncio.wait_for(_get_client(data, proxy_dict), timeout=20)
         return await asyncio.wait_for(_remove_cat(client), timeout=20)
+    except Exception as e:
+        raise e
+    finally:
+        if client:
+            try:
+                await client.disconnect()
+            except:
+                pass
+
+
+async def _start_bot(client, data):
+    if not client.is_connected():
+        await client.connect()
+    if not await client.is_user_authorized():
+        raise SessionInvalidError()
+    await handle_bot_start(client, data.get("bot"), data.get("referralCode"))
+
+
+@app.post("/api/startBot")
+async def start_bot(request: Request):
+    data = await request.json()
+    data, proxy_dict = process_data_and_proxy(data)
+
+    client = None
+    try:
+        client = await asyncio.wait_for(_get_client(data, proxy_dict), timeout=20)
+        return await asyncio.wait_for(_start_bot(client, data), timeout=20)
     except Exception as e:
         raise e
     finally:
