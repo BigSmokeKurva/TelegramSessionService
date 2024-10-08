@@ -390,11 +390,6 @@ async def _get_banana(client, data):
                                       referral_code)
 
 
-async def _get_onewin(client, data):
-    return await request_app_web_view(client, 'token1win_bot', 'start', data.get("tgIdentification"),
-                                      data.get("referralCode"))
-
-
 async def _get_clayton(client, data):
     return await request_app_web_view(client, 'claytoncoinbot', 'game', data.get("tgIdentification"),
                                       data.get("referralCode"))
@@ -443,7 +438,6 @@ service_map = {
     "blum": _get_blum,
     "iceberg": _get_iceberg,
     "tapswap": _get_tapswap,
-    "onewin": _get_onewin,
     "banana": _get_banana,
     "clayton": _get_clayton,
     "cats": _get_cats,
@@ -552,14 +546,14 @@ async def join_channels(request: Request):
                 pass
 
 
-async def _createTData(client, data):
+async def _create_tdata(client, data):
     tdata = await client.ToTDesktop(flag=UseCurrentSession)
     tdata.save(data['pathDirectory'])
     return JSONResponse({"status": "success"})
 
 
 @app.post("/api/createTData")
-async def createTData(request: Request):
+async def create_tdata(request: Request):
     data = await request.json()
     data, proxy_dict = process_data_and_proxy(data)
 
