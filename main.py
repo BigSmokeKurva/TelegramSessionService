@@ -560,7 +560,7 @@ async def create_tdata(request: Request):
     client = None
     try:
         client = await asyncio.wait_for(_get_client(data, proxy_dict), timeout=20)
-        return await asyncio.wait_for(_createTData(client, data), timeout=20)
+        return await asyncio.wait_for(_create_tdata(client, data), timeout=20)
     except Exception as e:
         raise e
     finally:
