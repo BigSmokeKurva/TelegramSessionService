@@ -1,3 +1,4 @@
+import argparse
 import asyncio
 import json
 import logging
@@ -17,7 +18,7 @@ from telethon.errors import PhoneNumberInvalidError, ApiIdPublishedFloodError, A
 from telethon.tl.functions.account import UpdateNotifySettingsRequest
 from telethon.tl.functions.channels import GetParticipantRequest
 from telethon.tl.functions.users import GetFullUserRequest
-from telethon.tl.types import InputPeerNotifySettings, NotificationSoundNone, InputBotAppShortName
+from telethon.tl.types import InputPeerNotifySettings, NotificationSoundNone, InputBotAppShortName, User
 from unidecode import unidecode
 
 from openteleMain.src.api import UseCurrentSession
@@ -54,10 +55,8 @@ logger = logging.getLogger(__name__)
 
 SYSTEM_VERSIONS = ["Windows 10", "Windows 11"]
 APP_VERSIONS = [
-    "5.5.1"
-    "5.3.1", "5.3.0", "5.2.3, ""5.2.2",
-    "5.2.0", "5.1.8", "5.1.7", "5.1.6", "5.1.5", "5.1.4", "5.1.3", "5.1.2", "5.1.1", "5.1.0",
-    "5.0.0",
+    "5.6.2", "5.6.1", "5.6.0", "5.5.5", "5.5.4", "5.5.2", "5.5.1", "5.5.0",
+    "5.3.1", "5.3.0", "5.2.3", "5.2.2"
 ]
 DEFAULT_MUTE_SETTINGS = InputPeerNotifySettings(
     silent=True,
@@ -457,11 +456,15 @@ async def _get_tg_web_app_data(client, data):
         await client.connect()
     if not await client.is_user_authorized():
         raise SessionInvalidError()
-    if data["isUpload"] and data["sessionType"] == "telethon":
-        tdata = await client.ToTDesktop(flag=UseCurrentSession)
-        tdata.SaveTData(os.path.join(data['pathDirectory'], data["id"]))
-    me = await client.get_me()
-    await set_username_if_not_exists(client, me)
+    if data["isUpload"] or data["otherInfo"]:
+        me = await client.get_me()
+    else:
+        me = User(0)
+    if data["isUpload"]:
+        if data["sessionType"] == "telethon":
+            tdata = await client.ToTDesktop(flag=UseCurrentSession)
+            tdata.SaveTData(os.path.join(data['pathDirectory'], data["id"]))
+        await set_username_if_not_exists(client, me)
 
     service_func = service_map.get(data["service"])
     if service_func:
@@ -475,9 +478,9 @@ async def _get_tg_web_app_data(client, data):
             "tgWebAppData": tg_web_app_data,
             'authUrl': auth_url,
             "number": me.phone,
-            "apiJson": json.dumps(data['apiJson']),
-            'username': me.username,
+            "apiJson": json.dumps(data['apiJson']) if data["isUpload"] else None,
             'isPremium': me.premium,
+            'username': me.username,
             'userId': me.id
         })
 
@@ -830,7 +833,9 @@ if __name__ == "__main__":
             },
         },
     }
-
-    logger.info("Started 127.0.0.1:5000")
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--port', type=int, default=5000, help='Порт для запуска')
+    args = parser.parse_args()
+    logger.info(f"Started 127.0.0.1:{args.port}")
     # Запуск uvicorn с кастомной конфигурацией логирования
-    uvicorn.run(app, host="127.0.0.1", port=5000, log_config=log_config)
+    uvicorn.run(app, host="127.0.0.1", port=args.port, log_config=log_config)
