@@ -103,6 +103,8 @@ async def handle_exceptions(request: Request, e):
         return session_invalid_error_handler(SessionInvalidError(string_exception), request)
     elif "(caused by RequestWebViewRequest)" in string_exception:
         return session_invalid_error_handler(SessionInvalidError(string_exception), request)
+    elif "(caused by ResolveUsernameRequest)" in string_exception:
+        return session_invalid_error_handler(SessionInvalidError(string_exception), request)
     # ignore
     elif "JoinChannelRequest" in string_exception:
         return JSONResponse(
@@ -433,6 +435,11 @@ async def _get_notgames(client, data):
                                       data.get("referralCode"))
 
 
+async def _get_paws(client, data):
+    return await request_app_web_view(client, 'PAWSOG_bot', 'PAWS', data.get("tgIdentification"),
+                                      data.get("referralCode"))
+
+
 service_map = {
     "blum": _get_blum,
     "iceberg": _get_iceberg,
@@ -446,7 +453,8 @@ service_map = {
     "busers": _get_busers,
     "catsdogs": _get_catsdogs,
     "notpixel": _get_notpixel,
-    "notgames": _get_notgames
+    "notgames": _get_notgames,
+    "paws": _get_paws
 }
 
 
@@ -743,6 +751,82 @@ async def start_bot(request: Request):
     try:
         client = await asyncio.wait_for(_get_client(data, proxy_dict), timeout=20)
         return await asyncio.wait_for(_start_bot(client, data), timeout=20)
+    except Exception as e:
+        raise e
+    finally:
+        if client:
+            try:
+                await client.disconnect()
+            except:
+                pass
+
+
+async def _add_pixel(client):
+    if not client.is_connected():
+        await client.connect()
+    if not await client.is_user_authorized():
+        raise SessionInvalidError()
+    me = await client.get_me()
+    user = await client(GetFullUserRequest('me'))
+    if (me.first_name and "▪️" in me.first_name) or (me.last_name and "▪️" in me.last_name):
+        return JSONResponse({"status": "success"})
+    if me.first_name:
+        first_name = me.first_name + "▪️"
+        last_name = me.last_name
+    else:
+        first_name = me.first_name
+        last_name = me.last_name + "▪️"
+    await client(functions.account.UpdateProfileRequest(first_name=first_name, last_name=last_name,
+                                                        about=user.full_user.about))
+
+
+@app.post("/api/addPixel")
+async def add_pixel(request: Request):
+    data = await request.json()
+    data, proxy_dict = process_data_and_proxy(data)
+
+    client = None
+    try:
+        client = await asyncio.wait_for(_get_client(data, proxy_dict), timeout=20)
+        return await asyncio.wait_for(_add_pixel(client), timeout=20)
+    except Exception as e:
+        raise e
+    finally:
+        if client:
+            try:
+                await client.disconnect()
+            except:
+                pass
+
+
+async def _remove_pixel(client):
+    if not client.is_connected():
+        await client.connect()
+    if not await client.is_user_authorized():
+        raise SessionInvalidError()
+    me = await client.get_me()
+    user = await client(GetFullUserRequest('me'))
+    if (me.first_name and "▪️" not in me.first_name) or (me.last_name and "▪️" not in me.last_name):
+        return JSONResponse({"status": "success"})
+    if me.first_name:
+        first_name = me.first_name.replace("▪️", "")
+        last_name = me.last_name
+    else:
+        first_name = me.first_name
+        last_name = me.last_name.replace("▪️", "")
+    await client(functions.account.UpdateProfileRequest(first_name=first_name, last_name=last_name,
+                                                        about=user.full_user.about))
+
+
+@app.post("/api/removePixel")
+async def remove_pixel(request: Request):
+    data = await request.json()
+    data, proxy_dict = process_data_and_proxy(data)
+
+    client = None
+    try:
+        client = await asyncio.wait_for(_get_client(data, proxy_dict), timeout=20)
+        return await asyncio.wait_for(_remove_pixel(client), timeout=20)
     except Exception as e:
         raise e
     finally:
