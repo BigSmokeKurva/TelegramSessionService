@@ -171,7 +171,7 @@ async def request_web_view(client, peer, bot, url, platform, referral_code=None)
             from_bot_menu=True,
             url=url
         ))
-    auth_url = web_view.url
+    auth_url = re.sub(r'Version=(.*)&', 'Version=7.10&', web_view.url)
     tg_web_app_data = unquote(
         string=unquote(string=auth_url.split('tgWebAppData=')[1].split('&tgWebAppVersion')[0]))
     return tg_web_app_data, auth_url
@@ -194,7 +194,7 @@ async def request_app_web_view(client, bot_name, short_name, platform, referral_
             platform=platform,
             write_allowed=True,
         ))
-    auth_url = web_view.url
+    auth_url = re.sub(r'Version=(.*)&', 'Version=7.10&', web_view.url)
     tg_web_app_data = unquote(
         string=unquote(string=auth_url.split('tgWebAppData=')[1].split('&tgWebAppVersion')[0]))
     return tg_web_app_data, auth_url
