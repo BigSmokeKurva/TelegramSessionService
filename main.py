@@ -837,6 +837,82 @@ async def remove_pixel(request: Request):
                 pass
 
 
+async def _add_paws(client):
+    if not client.is_connected():
+        await client.connect()
+    if not await client.is_user_authorized():
+        raise SessionInvalidError()
+    me = await client.get_me()
+    user = await client(GetFullUserRequest('me'))
+    if (me.first_name and "🐾" in me.first_name) or (me.last_name and "🐾" in me.last_name):
+        return JSONResponse({"status": "success"})
+    if me.first_name:
+        first_name = me.first_name + "🐾"
+        last_name = me.last_name
+    else:
+        first_name = me.first_name
+        last_name = me.last_name + "🐾"
+    await client(functions.account.UpdateProfileRequest(first_name=first_name, last_name=last_name,
+                                                        about=user.full_user.about))
+
+
+@app.post("/api/addPaws")
+async def add_paws(request: Request):
+    data = await request.json()
+    data, proxy_dict = process_data_and_proxy(data)
+
+    client = None
+    try:
+        client = await asyncio.wait_for(_get_client(data, proxy_dict), timeout=20)
+        return await asyncio.wait_for(_add_paws(client), timeout=20)
+    except Exception as e:
+        raise e
+    finally:
+        if client:
+            try:
+                await client.disconnect()
+            except:
+                pass
+
+
+async def _remove_paws(client):
+    if not client.is_connected():
+        await client.connect()
+    if not await client.is_user_authorized():
+        raise SessionInvalidError()
+    me = await client.get_me()
+    user = await client(GetFullUserRequest('me'))
+    if (me.first_name and "🐾" not in me.first_name) or (me.last_name and "🐾" not in me.last_name):
+        return JSONResponse({"status": "success"})
+    if me.first_name:
+        first_name = me.first_name.replace("🐾", "")
+        last_name = me.last_name
+    else:
+        first_name = me.first_name
+        last_name = me.last_name.replace("🐾", "")
+    await client(functions.account.UpdateProfileRequest(first_name=first_name, last_name=last_name,
+                                                        about=user.full_user.about))
+
+
+@app.post("/api/removePaws")
+async def remove_paws(request: Request):
+    data = await request.json()
+    data, proxy_dict = process_data_and_proxy(data)
+
+    client = None
+    try:
+        client = await asyncio.wait_for(_get_client(data, proxy_dict), timeout=20)
+        return await asyncio.wait_for(_remove_paws(client), timeout=20)
+    except Exception as e:
+        raise e
+    finally:
+        if client:
+            try:
+                await client.disconnect()
+            except:
+                pass
+
+
 @app.middleware("http")
 async def capture_request_body(request: Request, call_next):
     request.state.body = await request.body()
