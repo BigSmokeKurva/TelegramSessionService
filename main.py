@@ -171,7 +171,7 @@ async def request_web_view(client, peer, bot, url, platform, referral_code=None)
             from_bot_menu=True,
             url=url
         ))
-    auth_url = re.sub(r'Version=(.*)&', 'Version=7.10&', web_view.url)
+    auth_url = re.sub(r'Version=(.*)&', 'Version=8.0&', web_view.url)
     tg_web_app_data = unquote(
         string=unquote(string=auth_url.split('tgWebAppData=')[1].split('&tgWebAppVersion')[0]))
     return tg_web_app_data, auth_url
@@ -194,7 +194,7 @@ async def request_app_web_view(client, bot_name, short_name, platform, referral_
             platform=platform,
             write_allowed=True,
         ))
-    auth_url = re.sub(r'Version=(.*)&', 'Version=7.10&', web_view.url)
+    auth_url = re.sub(r'Version=(.*)&', 'Version=8.0&', web_view.url)
     tg_web_app_data = unquote(
         string=unquote(string=auth_url.split('tgWebAppData=')[1].split('&tgWebAppVersion')[0]))
     return tg_web_app_data, auth_url
@@ -440,6 +440,11 @@ async def _get_paws(client, data):
                                       data.get("referralCode"))
 
 
+async def _get_community(client, data):
+    return await request_app_web_view(client, 'community_bot', 'join', data.get("tgIdentification"),
+                                      data.get("referralCode"))
+
+
 service_map = {
     "blum": _get_blum,
     "iceberg": _get_iceberg,
@@ -454,7 +459,8 @@ service_map = {
     "catsdogs": _get_catsdogs,
     "notpixel": _get_notpixel,
     "notgames": _get_notgames,
-    "paws": _get_paws
+    "paws": _get_paws,
+    "community": _get_community
 }
 
 
