@@ -445,6 +445,11 @@ async def _get_community(client, data):
                                       data.get("referralCode"))
 
 
+async def _get_tverse(client, data):
+    return await request_web_view(client, 'tverse', 'tverse', "https://app.tonverse.app/", data.get("tgIdentification"),
+                                  None)
+
+
 service_map = {
     "blum": _get_blum,
     "iceberg": _get_iceberg,
@@ -460,7 +465,8 @@ service_map = {
     "notpixel": _get_notpixel,
     "notgames": _get_notgames,
     "paws": _get_paws,
-    "community": _get_community
+    "community": _get_community,
+    "tverse": _get_tverse
 }
 
 
