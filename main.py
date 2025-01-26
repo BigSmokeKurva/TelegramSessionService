@@ -114,7 +114,7 @@ async def handle_exceptions(request: Request, e):
     # other errors
     else:
         logger.error(f"Unexpected error: {string_exception}")
-        return await unknown_exception_handler(UnknownError(status_code=200, detail=string_exception), request)
+        return unknown_exception_handler(UnknownError(status_code=200, detail=string_exception), request)
 
 
 def proxy_error_handler(exc: ProxyError, request: Request):
@@ -450,6 +450,11 @@ async def _get_tverse(client, data):
                                   None)
 
 
+async def _get_midas(client, data):
+    return await request_app_web_view(client, 'MidasRWA_bot', 'app', data.get("tgIdentification"),
+                                      data.get("referralCode"))
+
+
 service_map = {
     "blum": _get_blum,
     "iceberg": _get_iceberg,
@@ -466,7 +471,8 @@ service_map = {
     "notgames": _get_notgames,
     "paws": _get_paws,
     "community": _get_community,
-    "tverse": _get_tverse
+    "tverse": _get_tverse,
+    "midas": _get_midas
 }
 
 
