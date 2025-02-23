@@ -436,8 +436,8 @@ async def _get_notgames(client, data):
 
 
 async def _get_paws(client, data):
-    return await request_app_web_view(client, 'PAWSOG_bot', 'PAWS', data.get("tgIdentification"),
-                                      data.get("referralCode"))
+    return await request_app_web_view(client, 'VerifierP_bot', 'login', data.get("tgIdentification"),
+                                      "eyJyZWRpcmVjdFRvIjoiaHR0cHM6Ly9wYXdzLmNvbW11bml0eSJ9")
 
 
 async def _get_community(client, data):
