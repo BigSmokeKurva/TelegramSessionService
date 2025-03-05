@@ -455,6 +455,11 @@ async def _get_midas(client, data):
                                       data.get("referralCode"))
 
 
+async def _get_hipin(client, data):
+    return await request_app_web_view(client, 'hi_PIN_bot', 'app', data.get("tgIdentification"),
+                                      data.get("referralCode"))
+
+
 service_map = {
     "blum": _get_blum,
     "iceberg": _get_iceberg,
@@ -472,7 +477,8 @@ service_map = {
     "paws": _get_paws,
     "community": _get_community,
     "tverse": _get_tverse,
-    "midas": _get_midas
+    "midas": _get_midas,
+    "hipin": _get_hipin
 }
 
 
