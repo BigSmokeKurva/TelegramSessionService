@@ -171,7 +171,7 @@ async def request_web_view(client, peer, bot, url, platform, referral_code=None)
             from_bot_menu=True,
             url=url
         ))
-    auth_url = re.sub(r'Version=(.*)&', 'Version=8.0&', web_view.url)
+    auth_url = re.sub(r'Version=(.*)&', 'Version=8.4&', web_view.url)
     tg_web_app_data = unquote(
         string=unquote(string=auth_url.split('tgWebAppData=')[1].split('&tgWebAppVersion')[0]))
     return tg_web_app_data, auth_url
@@ -194,7 +194,7 @@ async def request_app_web_view(client, bot_name, short_name, platform, referral_
             platform=platform,
             write_allowed=True,
         ))
-    auth_url = re.sub(r'Version=(.*)&', 'Version=8.0&', web_view.url)
+    auth_url = re.sub(r'Version=(.*)&', 'Version=8.4&', web_view.url)
     tg_web_app_data = unquote(
         string=unquote(string=auth_url.split('tgWebAppData=')[1].split('&tgWebAppVersion')[0]))
     return tg_web_app_data, auth_url
@@ -436,7 +436,7 @@ async def _get_notgames(client, data):
 
 
 async def _get_paws(client, data):
-    return await request_app_web_view(client, 'VerifierP_bot', 'login', data.get("tgIdentification"),
+    return await request_app_web_view(client, 'Never_Back_Down_PWS_Bot', 'login', data.get("tgIdentification"),
                                       "eyJyZWRpcmVjdFRvIjoiaHR0cHM6Ly9wYXdzLmNvbW11bml0eSJ9")
 
 
@@ -460,6 +460,11 @@ async def _get_hipin(client, data):
                                       data.get("referralCode"))
 
 
+async def _get_coub(client, data):
+    return await request_app_web_view(client, 'coub', 'app', data.get("tgIdentification"),
+                                      data.get("referralCode"))
+
+
 service_map = {
     "blum": _get_blum,
     "iceberg": _get_iceberg,
@@ -478,7 +483,8 @@ service_map = {
     "community": _get_community,
     "tverse": _get_tverse,
     "midas": _get_midas,
-    "hipin": _get_hipin
+    "hipin": _get_hipin,
+    "coub": _get_coub
 }
 
 
